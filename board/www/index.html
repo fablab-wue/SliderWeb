@@ -6,20 +6,20 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0b0d10">
   <title>SliderWeb</title>
-  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/app.css?v=4">
 </head>
 <body>
   <div id="offline" class="offline hidden">Link lost…</div>
 
   <header class="nav" role="tablist">
-    <button class="tab" data-tab="home" title="Home" aria-label="Home">⌂</button>
-    <button class="tab active" data-tab="move" title="Move" aria-label="Move">»</button>
-    <button class="tab" data-tab="joy" title="Joystick">JS</button>
-    <button class="tab" data-tab="win" title="Window">W</button>
-    <button class="tab" data-tab="abc" title="Marks A B C">ABC</button>
-    <button class="tab" data-tab="tl" title="Timelapse">TL</button>
+    <button class="tab" data-tab="home" title="Home" aria-label="Home">⌂⎆</button>
+    <button class="tab active" data-tab="move" title="Move" aria-label="Move">▶</button>
+    <button class="tab" data-tab="joy" title="Joystick">⎈⌖</button>
+    <button class="tab" data-tab="win" title="Window">⍈</button>
+    <button class="tab" data-tab="abc" title="Marks A B C">AB</button>
+    <button class="tab" data-tab="tl" title="Timelapse">⏲</button>
     <button class="tab" data-tab="config" title="Config" aria-label="Config">⚙</button>
-    <button class="tab" data-tab="help" title="Help" aria-label="Help">?</button>
+    <button class="tab" data-tab="help" title="Help" aria-label="Help">🕮</button>
   </header>
 
   <section class="panel hidden" data-show="home">
@@ -38,16 +38,16 @@
           <label class="cell-switch">
             <input type="checkbox" id="dir">
             <span class="switch-ui" aria-hidden="true"></span>
-            <span class="switch-cap">DIR</span>
+            <span class="switch-cap">⭤ DIR</span>
           </label>
           <label class="cell-switch hidden axis2-only">
             <input type="checkbox" id="dir2">
             <span class="switch-ui" aria-hidden="true"></span>
-            <span class="switch-cap">DIR2</span>
+            <span class="switch-cap">⭥ DIR2</span>
           </label>
-          <button type="button" class="btn ochre txt" data-btn="HOME">HOME</button>
+          <button type="button" class="btn ochre txt" data-btn="HOME">⇱ HOME</button>
         </div>
-        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+        <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
       <div class="slider-block">
@@ -85,15 +85,15 @@
             <span class="num" id="etaMoveR"><span class="int">—</span>.<span class="frac">—</span></span>
             <span class="u">s</span>
           </div>
-          <button type="button" class="btn ochre" id="btnMoveL" data-btn="MOVE_L">&lt;</button>
-          <button type="button" class="btn option opt-span" data-btn="OPTION">*</button>
-          <button type="button" class="btn ochre" id="btnMoveR" data-btn="MOVE_R">&gt;</button>
-          <button type="button" class="btn ochre" id="btnFastL" data-btn="FAST_L">&lt;&lt;</button>
-          <button type="button" class="btn ochre" id="btnFastR" data-btn="FAST_R">&gt;&gt;</button>
-          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_L2">&lt;</button>
-          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_R2">&gt;</button>
+          <button type="button" class="btn ochre" id="btnMoveL" data-btn="MOVE_L">◀</button>
+          <button type="button" class="btn option opt-span" data-btn="OPTION">⎇</button>
+          <button type="button" class="btn ochre" id="btnMoveR" data-btn="MOVE_R">▶</button>
+          <button type="button" class="btn ochre" id="btnFastL" data-btn="FAST_L">◀◀</button>
+          <button type="button" class="btn ochre" id="btnFastR" data-btn="FAST_R">▶▶</button>
+          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_L2">◀</button>
+          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_R2">▶</button>
         </div>
-        <button type="button" class="btn red stop" id="btnStop" data-btn="STOP">■</button>
+        <button type="button" class="btn red stop" id="btnStop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
       <div class="slider-block">
@@ -145,25 +145,34 @@
             <span class="joy-log-cap">log</span>
           </label>
         </div>
-        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+        <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
     </div>
   </section>
 
   <section class="panel hidden" data-show="win">
     <div class="panel-fill">
-      <div class="pad-card">
-        <div class="pad-grid">
-          <div class="eta-cell eta-col-mid">
+      <div class="pad-card win-card">
+        <div class="win-eta-wrap">
+          <div class="eta-cell">
             <span class="num" id="etaWin"><span class="int">—</span>.<span class="frac">—</span></span>
             <span class="u">s</span>
           </div>
-          <button type="button" class="btn ochre" data-btn="SET_W_L">|&lt;-</button>
-          <div class="pad-note win-note-set">set actual position</div>
-          <button type="button" class="btn ochre" data-btn="SET_W_R">-&gt;|</button>
-          <button type="button" class="btn ochre" data-btn="RESET_W_L">&lt;-</button>
-          <div class="pad-note win-note-reset">reset to hard limit</div>
-          <button type="button" class="btn ochre" data-btn="RESET_W_R">-&gt;</button>
+        </div>
+        <div class="pad-grid">
+          <button type="button" class="btn ochre" data-btn="SET_W_L">⍇</button>
+          <div class="pad-note">set actual position</div>
+          <button type="button" class="btn ochre" data-btn="SET_W_R">⍈</button>
+        </div>
+        <div class="pad-grid hidden axis2-only">
+          <button type="button" class="btn yellow" data-btn="SET_W_L2">⍇</button>
+          <div class="pad-note">set soft limit</div>
+          <button type="button" class="btn yellow" data-btn="SET_W_R2">⍈</button>
+        </div>
+        <div class="pad-grid">
+          <button type="button" class="btn ochre" data-btn="RESET_W_L">⍁</button>
+          <div class="pad-note">reset to hard limit</div>
+          <button type="button" class="btn ochre" data-btn="RESET_W_R">⍁</button>
         </div>
       </div>
     </div>
@@ -185,12 +194,12 @@
             <span class="num" id="etaC"><span class="int">—</span>.<span class="frac">—</span></span>
             <span class="u">s</span>
           </div>
-          <button type="button" class="btn ochre" data-btn="A">A</button>
-          <button type="button" class="btn ochre" data-btn="B">B</button>
-          <button type="button" class="btn ochre" data-btn="C">C</button>
-          <button type="button" class="btn option opt-mid" data-btn="OPTION">*</button>
+          <button type="button" class="btn ochre" data-btn="A">⯈A</button>
+          <button type="button" class="btn ochre" data-btn="B">⯈B</button>
+          <button type="button" class="btn ochre" data-btn="C">⯈C</button>
+          <button type="button" class="btn option opt-mid" data-btn="OPTION">🛆⎇</button>
         </div>
-        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+        <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
       <div class="time-to">
@@ -199,9 +208,9 @@
         <input id="timeAbc" type="number" inputmode="decimal" step="0.1" min="0.1" value="1.0" placeholder="1.0">
       </div>
       <div class="time-row">
-        <button type="button" class="btn ochre" data-btn="T_A">t-&gt;A</button>
-        <button type="button" class="btn ochre" data-btn="T_B">t-&gt;B</button>
-        <button type="button" class="btn ochre" data-btn="T_C">t-&gt;C</button>
+        <button type="button" class="btn ochre" data-btn="T_A">t▹A</button>
+        <button type="button" class="btn ochre" data-btn="T_B">t▹B</button>
+        <button type="button" class="btn ochre" data-btn="T_C">t▹C</button>
       </div>
       <div class="slider-block">
         <div class="slider-head">
@@ -232,11 +241,11 @@
             <span class="num" id="etaTlC"><span class="int">—</span>.<span class="frac">—</span></span>
             <span class="u">s</span>
           </div>
-          <button type="button" class="btn ochre" data-btn="A">A</button>
-          <button type="button" class="btn ochre" data-btn="B">B</button>
-          <button type="button" class="btn ochre" data-btn="C">C</button>
+          <button type="button" class="btn ochre" data-btn="A">⤑A</button>
+          <button type="button" class="btn ochre" data-btn="B">⤑B</button>
+          <button type="button" class="btn ochre" data-btn="C">⤑C</button>
         </div>
-        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+        <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
     </div>
   </section>
