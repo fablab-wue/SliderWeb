@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0b0d10">
+  <title>SliderWeb</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="offline" class="offline hidden">Link lost…</div>
+
+  <header class="nav" role="tablist">
+    <button class="tab" data-tab="home" title="Home" aria-label="Home">⌂</button>
+    <button class="tab active" data-tab="move" title="Move" aria-label="Move">»</button>
+    <button class="tab" data-tab="joy" title="Joystick">JS</button>
+    <button class="tab" data-tab="win" title="Window">W</button>
+    <button class="tab" data-tab="abc" title="Marks A B C">ABC</button>
+    <button class="tab" data-tab="tl" title="Timelapse">TL</button>
+    <button class="tab" data-tab="config" title="Config" aria-label="Config">⚙</button>
+    <button class="tab" data-tab="help" title="Help" aria-label="Help">?</button>
+  </header>
+
+  <section class="panel hidden" data-show="home">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <div class="info-box" id="infoBox">
+            <div class="info-cap">INFO</div>
+            <div class="info-body">—</div>
+          </div>
+          <label class="cell-switch">
+            <input type="checkbox" id="enable">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-cap">ENABLE</span>
+          </label>
+          <label class="cell-switch">
+            <input type="checkbox" id="dir">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-cap">DIR</span>
+          </label>
+          <label class="cell-switch hidden axis2-only">
+            <input type="checkbox" id="dir2">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="switch-cap">DIR2</span>
+          </label>
+          <button type="button" class="btn ochre txt" data-btn="HOME">HOME</button>
+        </div>
+        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+      </div>
+      <div class="gap"></div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">ACCEL</span>
+            <span class="unit">mm/s²</span>
+          </div>
+          <span class="num" id="accValHome"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="accSliderHome" min="0" max="1000" value="200" class="speed">
+      </div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">SPEED</span>
+            <span class="unit">mm/s</span>
+          </div>
+          <span class="num" id="ssValHome"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="spdSliderHome" min="0" max="1000" value="200" class="speed">
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" data-show="move">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <div class="eta-cell eta-col-0">
+            <span class="num" id="etaMoveL"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <div class="eta-cell eta-col-2">
+            <span class="num" id="etaMoveR"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <button type="button" class="btn ochre" id="btnMoveL" data-btn="MOVE_L">&lt;</button>
+          <button type="button" class="btn option opt-span" data-btn="OPTION">*</button>
+          <button type="button" class="btn ochre" id="btnMoveR" data-btn="MOVE_R">&gt;</button>
+          <button type="button" class="btn ochre" id="btnFastL" data-btn="FAST_L">&lt;&lt;</button>
+          <button type="button" class="btn ochre" id="btnFastR" data-btn="FAST_R">&gt;&gt;</button>
+          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_L2">&lt;</button>
+          <button type="button" class="btn yellow hidden axis2-only" data-btn="MOVE_R2">&gt;</button>
+        </div>
+        <button type="button" class="btn red stop" id="btnStop" data-btn="STOP">■</button>
+      </div>
+      <div class="gap"></div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">SPEED</span>
+            <span class="unit">mm/s</span>
+          </div>
+          <span class="num" id="ssVal"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="spdSlider" min="0" max="1000" value="200" class="speed">
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="joy">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="joy-pad" id="joyPad" data-curve="lin">
+          <svg class="joy-face" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="joy-ring" id="joyRing75" cx="50" cy="50" r="33.75" fill="none"></circle>
+            <circle class="joy-ring" id="joyRing50" cx="50" cy="50" r="22.5" fill="none"></circle>
+            <circle class="joy-ring" id="joyRing25" cx="50" cy="50" r="11.25" fill="none"></circle>
+            <line class="joy-hair" x1="50" y1="5" x2="50" y2="95"></line>
+            <line class="joy-hair" x1="5" y1="50" x2="95" y2="50"></line>
+            <circle class="joy-rim" cx="50" cy="50" r="45" fill="none"></circle>
+          </svg>
+          <div class="joy-read">
+            <div id="joyX">0</div>
+            <div id="joyY" class="axis2-only hidden">0</div>
+          </div>
+          <div class="joy-handle" id="joyHandle">
+            <div class="joy-knob">
+              <div class="joy-core"></div>
+              <div class="joy-spec"></div>
+            </div>
+          </div>
+          <label class="joy-lock joy-lock-x">
+            <input type="checkbox" id="joyLockX">
+            <span class="switch-ui" aria-hidden="true"></span>
+          </label>
+          <label class="joy-lock joy-lock-y">
+            <input type="checkbox" id="joyLockY">
+            <span class="switch-ui" aria-hidden="true"></span>
+          </label>
+          <label class="joy-log">
+            <input type="checkbox" id="joyLog">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span class="joy-log-cap">log</span>
+          </label>
+        </div>
+        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="win">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <div class="eta-cell eta-col-mid">
+            <span class="num" id="etaWin"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <button type="button" class="btn ochre" data-btn="SET_W_L">|&lt;-</button>
+          <div class="pad-note win-note-set">set actual position</div>
+          <button type="button" class="btn ochre" data-btn="SET_W_R">-&gt;|</button>
+          <button type="button" class="btn ochre" data-btn="RESET_W_L">&lt;-</button>
+          <div class="pad-note win-note-reset">reset to hard limit</div>
+          <button type="button" class="btn ochre" data-btn="RESET_W_R">-&gt;</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="abc">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <div class="eta-cell">
+            <span class="num" id="etaA"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <div class="eta-cell">
+            <span class="num" id="etaB"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <div class="eta-cell">
+            <span class="num" id="etaC"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <button type="button" class="btn ochre" data-btn="A">A</button>
+          <button type="button" class="btn ochre" data-btn="B">B</button>
+          <button type="button" class="btn ochre" data-btn="C">C</button>
+          <button type="button" class="btn option opt-mid" data-btn="OPTION">*</button>
+        </div>
+        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+      </div>
+      <div class="gap"></div>
+      <div class="time-to">
+        <span class="cap">Time to [s]</span>
+        <span></span>
+        <input id="timeAbc" type="number" inputmode="decimal" step="0.1" min="0.1" value="1.0" placeholder="1.0">
+      </div>
+      <div class="time-row">
+        <button type="button" class="btn ochre" data-btn="T_A">t-&gt;A</button>
+        <button type="button" class="btn ochre" data-btn="T_B">t-&gt;B</button>
+        <button type="button" class="btn ochre" data-btn="T_C">t-&gt;C</button>
+      </div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">SPEED</span>
+            <span class="unit">mm/s</span>
+          </div>
+          <span class="num" id="ssValAbc"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="spdSliderAbc" min="0" max="1000" value="200" class="speed">
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="tl">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <div class="eta-cell">
+            <span class="num" id="etaTlA"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <div class="eta-cell">
+            <span class="num" id="etaTlB"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <div class="eta-cell">
+            <span class="num" id="etaTlC"><span class="int">—</span>.<span class="frac">—</span></span>
+            <span class="u">s</span>
+          </div>
+          <button type="button" class="btn ochre" data-btn="A">A</button>
+          <button type="button" class="btn ochre" data-btn="B">B</button>
+          <button type="button" class="btn ochre" data-btn="C">C</button>
+        </div>
+        <button type="button" class="btn red stop" data-btn="STOP">■</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="config">
+    <h2>Wi-Fi</h2>
+    <p class="hint" id="wifiHint"></p>
+    <label>SSID<input id="ssid" autocomplete="off"></label>
+    <label>Password<input id="password" type="password" autocomplete="off"></label>
+    <label>Hostname<input id="hostname" autocomplete="off"></label>
+    <div class="row">
+      <button type="button" class="btn ochre sm" id="wifiSave">Save & connect</button>
+      <button type="button" class="btn ghost sm" id="wifiForget">Forget</button>
+    </div>
+    <h2>HTML files</h2>
+    <p class="hint">Edit pages on the board. Keep JSON keys <code>pos spd acc line1 line2</code>.</p>
+    <select id="fileList"></select>
+    <textarea id="fileText" spellcheck="false"></textarea>
+    <button type="button" class="btn ochre sm" id="fileSave">Save file</button>
+  </section>
+
+  <section class="panel hidden" data-show="help">
+    <h2>SliderWeb</h2>
+    <p class="placeholder">WLAN remote for SliderMC. User manual will follow.</p>
+    <ul class="help">
+      <li>Tap MOVE: cruise stays on. Hold MOVE &gt; ⅓ s: runs while held.</li>
+      <li>STOP tap: stop. Hold 1 s: halt. Hold 2 s: disable.</li>
+      <li>SPEED slider sends commanded <code>SS</code>. Status Spd is actual.</li>
+    </ul>
+  </section>
+
+  <footer class="status">
+    <div class="tele" id="tele1">
+      <div class="metric">
+        <div class="meta"><span class="k">Pos</span><span class="u" id="posUnit">mm</span></div>
+        <span class="num" id="pos"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="metric">
+        <div class="meta"><span class="k">Spd</span><span class="u" id="spdUnit">mm/s</span></div>
+        <span class="num" id="spd"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="metric">
+        <div class="meta"><span class="k">Acc</span><span class="u" id="accUnit">mm/s²</span></div>
+        <span class="num" id="acc"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="letter" id="state">?</div>
+    </div>
+    <div class="tele hidden" id="tele2">
+      <div class="metric">
+        <div class="meta"><span class="k">Pos2</span><span class="u" id="pos2Unit">mm</span></div>
+        <span class="num" id="pos2"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="metric">
+        <div class="meta"><span class="k">Spd2</span><span class="u" id="spd2Unit">mm/s</span></div>
+        <span class="num" id="spd2"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="metric">
+        <div class="meta"><span class="k">Acc2</span><span class="u" id="acc2Unit">mm/s²</span></div>
+        <span class="num" id="acc2"><span class="int">—</span>.<span class="frac">—</span></span>
+      </div>
+      <div class="letter dim" id="state2"></div>
+    </div>
+    <div class="oled" id="oled">
+      <div id="line1">&nbsp;</div>
+      <div id="line2">&nbsp;</div>
+    </div>
+  </footer>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
