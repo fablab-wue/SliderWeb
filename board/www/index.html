@@ -33,19 +33,19 @@
           <label class="cell-switch">
             <input type="checkbox" id="enable">
             <span class="switch-ui" aria-hidden="true"></span>
-            <span class="switch-cap">ENABLE</span>
+            <span class="switch-cap">⎆ ENABLE</span>
           </label>
           <label class="cell-switch">
             <input type="checkbox" id="dir">
             <span class="switch-ui" aria-hidden="true"></span>
-            <span class="switch-cap">⭤ DIR</span>
+            <span class="switch-cap">⟺ SWAP DIR</span>
           </label>
           <label class="cell-switch hidden axis2-only">
             <input type="checkbox" id="dir2">
             <span class="switch-ui" aria-hidden="true"></span>
-            <span class="switch-cap">⭥ DIR2</span>
+            <span class="switch-cap">⟺ SWAP DIR 2nd</span>
           </label>
-          <button type="button" class="btn ochre txt" data-btn="HOME">⇱ HOME</button>
+          <button type="button" class="btn ochre txt" data-btn="HOME">⭶ HOME</button>
         </div>
         <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
@@ -86,7 +86,7 @@
             <span class="u">s</span>
           </div>
           <button type="button" class="btn ochre" id="btnMoveL" data-btn="MOVE_L">◀</button>
-          <button type="button" class="btn option opt-span" data-btn="OPTION">⎇</button>
+          <button type="button" class="btn option opt-span" data-btn="OPTION">🛆⎇</button>
           <button type="button" class="btn ochre" id="btnMoveR" data-btn="MOVE_R">▶</button>
           <button type="button" class="btn ochre" id="btnFastL" data-btn="FAST_L">◀◀</button>
           <button type="button" class="btn ochre" id="btnFastR" data-btn="FAST_R">▶▶</button>
@@ -161,17 +161,17 @@
         </div>
         <div class="pad-grid">
           <button type="button" class="btn ochre" data-btn="SET_W_L">⍇</button>
-          <div class="pad-note">set actual position</div>
+          <div class="pad-note">set actual position as window</div>
           <button type="button" class="btn ochre" data-btn="SET_W_R">⍈</button>
         </div>
         <div class="pad-grid hidden axis2-only">
           <button type="button" class="btn yellow" data-btn="SET_W_L2">⍇</button>
-          <div class="pad-note">set soft limit</div>
+          <div class="pad-note">set actual position as window 2nd</div>
           <button type="button" class="btn yellow" data-btn="SET_W_R2">⍈</button>
         </div>
         <div class="pad-grid">
           <button type="button" class="btn ochre" data-btn="RESET_W_L">⍁</button>
-          <div class="pad-note">reset to hard limit</div>
+          <div class="pad-note">reset window</div>
           <button type="button" class="btn ochre" data-btn="RESET_W_R">⍁</button>
         </div>
       </div>
@@ -198,14 +198,18 @@
           <button type="button" class="btn ochre" data-btn="B">⯈B</button>
           <button type="button" class="btn ochre" data-btn="C">⯈C</button>
           <button type="button" class="btn option opt-mid" data-btn="OPTION">🛆⎇</button>
+          <span></span>
+          <button type="button" class="btn ochre" data-btn="AB">A⮔B</button>
+          <button type="button" class="btn ochre" data-btn="BC">B⧎C</button>
+          <button type="button" class="btn ochre" data-btn="CA">C⯇⯈A</button>
         </div>
         <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
       <div class="time-to">
-        <span class="cap">Time to [s]</span>
+        <span class="cap">t - Time to move to A/B/C [s]</span>
         <span></span>
-        <input id="timeAbc" type="number" inputmode="decimal" step="0.1" min="0.1" value="1.0" placeholder="1.0">
+        <input id="timeAbc" type="number" inputmode="decimal" step="0.1" min="0.1" max="1000" value="10.0" placeholder="1.0">
       </div>
       <div class="time-row">
         <button type="button" class="btn ochre" data-btn="T_A">t▹A</button>
@@ -241,11 +245,31 @@
             <span class="num" id="etaTlC"><span class="int">—</span>.<span class="frac">—</span></span>
             <span class="u">s</span>
           </div>
-          <button type="button" class="btn ochre" data-btn="A">⤑A</button>
-          <button type="button" class="btn ochre" data-btn="B">⤑B</button>
-          <button type="button" class="btn ochre" data-btn="C">⤑C</button>
+          <button type="button" class="btn ochre" data-btn="A">⏲A</button>
+          <button type="button" class="btn ochre" data-btn="B">⏲B</button>
+          <button type="button" class="btn ochre" data-btn="C">⏲C</button>
         </div>
         <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
+      </div>
+      <div class="gap"></div>
+      <div class="time-to">
+        <span class="cap">Timelapse FACTOR</span>
+        <span></span>
+        <input id="TL_FACTOR" type="number" inputmode="numeric" step="1" min="3" max="1000" value="10">
+      </div>
+      <div class="time-to">
+        <span class="cap">FPS</span>
+        <span></span>
+        <input id="TL_FPS" type="number" inputmode="numeric" step="1" min="1" max="60" value="30">
+      </div>
+      <div class="pad-grid tl-msm-row">
+        <span></span>
+        <span></span>
+        <label class="cell-switch">
+          <input type="checkbox" id="TL_MSM">
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span class="switch-cap">MSM</span>
+        </label>
       </div>
     </div>
   </section>
@@ -280,34 +304,36 @@
   <footer class="status">
     <div class="tele" id="tele1">
       <div class="metric">
-        <div class="meta"><span class="k">Pos</span><span class="u" id="posUnit">mm</span></div>
         <span class="num" id="pos"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Pos</span><span class="u" id="posUnit">mm</span></div>
       </div>
       <div class="metric">
-        <div class="meta"><span class="k">Spd</span><span class="u" id="spdUnit">mm/s</span></div>
         <span class="num" id="spd"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Spd</span><span class="u" id="spdUnit">mm/s</span></div>
       </div>
       <div class="metric">
-        <div class="meta"><span class="k">Acc</span><span class="u" id="accUnit">mm/s²</span></div>
         <span class="num" id="acc"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Acc</span><span class="u" id="accUnit">mm/s²</span></div>
       </div>
       <div class="letter" id="state">?</div>
     </div>
+    <hr>
     <div class="tele hidden" id="tele2">
       <div class="metric">
-        <div class="meta"><span class="k">Pos2</span><span class="u" id="pos2Unit">mm</span></div>
         <span class="num" id="pos2"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Pos2</span><span class="u" id="pos2Unit">mm</span></div>
       </div>
       <div class="metric">
-        <div class="meta"><span class="k">Spd2</span><span class="u" id="spd2Unit">mm/s</span></div>
         <span class="num" id="spd2"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Spd2</span><span class="u" id="spd2Unit">mm/s</span></div>
       </div>
       <div class="metric">
-        <div class="meta"><span class="k">Acc2</span><span class="u" id="acc2Unit">mm/s²</span></div>
         <span class="num" id="acc2"><span class="int">—</span>.<span class="frac">—</span></span>
+        <div class="meta"><span class="k">Acc2</span><span class="u" id="acc2Unit">mm/s²</span></div>
       </div>
       <div class="letter dim" id="state2"></div>
     </div>
+    <hr>
     <div class="oled" id="oled">
       <div id="line1">&nbsp;</div>
       <div id="line2">&nbsp;</div>

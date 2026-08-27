@@ -352,6 +352,10 @@ body.axes-2 .info-box {
   margin: 0.65rem 0 0.2rem;
 }
 
+.tl-msm-row {
+  margin-top: 0.55rem;
+}
+
 .axis-row {
   display: flex;
   gap: 0.4rem;
@@ -429,6 +433,12 @@ textarea {
   background: #07090c;
   border-top: 1px solid #1c2530;
   padding: 0.45rem 0.7rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+}
+.status hr {
+  border: 0;
+  border-top: 1px solid #1c2530;
+  margin: 0.45rem 0;
+  height: 0;
 }
 .tele {
   display: grid;
