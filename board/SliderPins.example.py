@@ -15,11 +15,14 @@ SW_config = {
     "PIN_LED_G": 3,
     "PIN_LED_B": 4,
     "PIN_NEOPIXEL": None,  # WS2812 off
+    "PIN_CAMERA_CTRL": 15,  # timelapse shutter
+    "CAMERA_PULSE_MS": 100,
     "LED_ACTIVE_HIGH": True,
     "AP_PASSWORD": "sliderweb",
     "HOSTNAME": "slider",
     "STA_GRACE_MS": 10000,
     "DEBUG_LEVEL": 3,
     "SW_MC_SIM": True,
-    "SW_MC_BANNER_S": 3.0,
+    "SW_MC_POWER_DELAY_MS": 300,
+    "SW_MC_BANNER_S": 5.0,
 }

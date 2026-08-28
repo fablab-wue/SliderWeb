@@ -13,6 +13,10 @@ PIN_NEOPIXEL = None
 LED_ACTIVE_HIGH = True  # common-cathode
 LED_PWM_HZ = 1000
 
+# Timelapse / camera trigger (active-high pulse). Free of UART/LED pins.
+PIN_CAMERA_CTRL = 15
+CAMERA_PULSE_MS = 100
+
 # ---------------------------------------------------------------------------
 # Motion feel (JKSlider-compatible)
 # ---------------------------------------------------------------------------
@@ -28,21 +32,28 @@ SW_STATUS_HZ = 12
 SW_SS_HYST_MM_S = 0.05
 SW_LEFT_IS_NEGATIVE = True
 
+# MSM timelapse hop motion (board-owned; not in TSK_TL_MSM line)
+SW_SPEED_TL_MM_S = 5.0
+SW_ACCEL_TL_MM_S2 = 50.0
+
 # ---------------------------------------------------------------------------
 # Thin MC bridge (JS owns panel logic; Pico relays UART)
 # ---------------------------------------------------------------------------
-# Client must send {"wdt":"alive"} ~1/s. Missing for this long → MS (stop).
+# Client must send {"wdt":"alive"} ~1/s. Missing for this long → MS (stop)
+# unless a Pico-owned task is active (task keeps running through phone sleep).
 SW_WDT_TIMEOUT_MS = 2500
 # Echo every forwarded MC line to USB CDC (REPL), e.g. "MC> SS 40"
 SW_MC_USB_ECHO = True
-# Max length of {"mc":"..."} payload (ASCII command line)
-SW_MC_LINE_MAX = 80
+# Max length of {"mc":"..."} / {"task":"..."} payload (ASCII command line)
+SW_MC_LINE_MAX = 120
 
 # ---------------------------------------------------------------------------
 # SliderMC link / simulation
 # ---------------------------------------------------------------------------
 SW_MC_SIM = True
-SW_MC_BANNER_S = 3.0
+# Settle after shared power-on before UART banner spam
+SW_MC_POWER_DELAY_MS = 300
+SW_MC_BANNER_S = 5.0
 SW_MC_SIM_HZ = 10
 
 # ---------------------------------------------------------------------------

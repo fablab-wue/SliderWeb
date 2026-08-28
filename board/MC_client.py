@@ -110,10 +110,16 @@ class MC_Client:
         self.mc_config = {}
         self.max_speed = None
         self.max_accel = None
+        # Physical travel (CG slider_min/max) — fixed for the slider lifetime.
         self.slider_min = None
         self.slider_max = None
         self.slider_min_2 = None
         self.slider_max_2 = None
+        # Soft moving window (GL/GR); init ≈ physical, then set via SL/SR.
+        self.soft_min = None
+        self.soft_max = None
+        self.soft_min_2 = None
+        self.soft_max_2 = None
         self.unit_name = None
         # Public McState int; LOCKED until first verbose status.
         self.status = self.MC_STATE_LOCKED
@@ -186,7 +192,7 @@ class MC_Client:
         """Open RX task, unlock MC with ``\\n``, wait for welcome ``# …``, then ``SV 1``.
 
         On successful banner, reads MC config via ``CG`` into ``mc_config`` /
-        ``max_speed`` / ``max_accel`` / ``slider_min`` / ``slider_max``.
+        physical ``slider_min`` / ``slider_max``, then soft window via ``GL``/``GR``.
         Seeds session ``SS``/``SA`` from CG init_speed/init_accel when present.
         """
         if self._rx_task is None:
@@ -216,6 +222,7 @@ class MC_Client:
         await self.send("SV", 1)
         if self.linked:
             await self.fetchConfig()
+            await self.fetchSoftLimits()
         # Session SS/SA from CG init_speed/init_accel when present (no CS).
         if self._speed_mm_s is not None:
             self._cmd("SS", _fmt_arg(self._speed_mm_s))
@@ -249,20 +256,18 @@ class MC_Client:
         self.unit_name = un if un else None
         self.max_speed = _parse_cfg_float(collected.get("max_speed"))
         self.max_accel = _parse_cfg_float(collected.get("max_accel"))
-        self.slider_min = _parse_cfg_limit(
-            collected.get("slider_min", collected.get("soft_min"))
-        )
-        self.slider_max = _parse_cfg_limit(
-            collected.get("slider_max", collected.get("soft_max"))
-        )
-        self.slider_min_2 = _parse_cfg_limit(
-            collected.get("slider_min_2", collected.get("soft_min_2"))
-        )
-        self.slider_max_2 = _parse_cfg_limit(
-            collected.get("slider_max_2", collected.get("soft_max_2"))
-        )
-        self._soft_min = self.slider_min
-        self._soft_max = self.slider_max
+        # Physical ends from CG (immutable for the slider lifetime).
+        self.slider_min = _parse_cfg_limit(collected.get("slider_min"))
+        self.slider_max = _parse_cfg_limit(collected.get("slider_max"))
+        self.slider_min_2 = _parse_cfg_limit(collected.get("slider_min_2"))
+        self.slider_max_2 = _parse_cfg_limit(collected.get("slider_max_2"))
+        # Soft defaults to physical until fetchSoftLimits (GL/GR) runs.
+        self.soft_min = self.slider_min
+        self.soft_max = self.slider_max
+        self.soft_min_2 = self.slider_min_2
+        self.soft_max_2 = self.slider_max_2
+        self._soft_min = self.soft_min
+        self._soft_max = self.soft_max
         if self.max_speed is not None:
             self._max_speed_mm_s = self.max_speed
         init_speed = _parse_cfg_float(
@@ -277,6 +282,39 @@ class MC_Client:
             self._accel_mm_s2 = init_accel
         self._refresh_soft_limit_flag()
         return self.mc_config
+
+    async def fetchSoftLimits(self, timeout_s=1.0):
+        """Read live soft window via ``GL`` / ``GR`` (axis-2: ``GL 2`` / ``GR 2``)."""
+        try:
+            gl = await self.query("GL", timeout_s=timeout_s)
+            self.soft_min = _parse_cfg_limit(gl)
+        except OSError:
+            dbg(2, "GL timeout — keep soft_min", self.soft_min)
+        try:
+            gr = await self.query("GR", timeout_s=timeout_s)
+            self.soft_max = _parse_cfg_limit(gr)
+        except OSError:
+            dbg(2, "GR timeout — keep soft_max", self.soft_max)
+        if self._axis >= 2:
+            try:
+                gl2 = await self.query("GL", 2, timeout_s=timeout_s)
+                self.soft_min_2 = _parse_cfg_limit(gl2)
+            except OSError:
+                pass
+            try:
+                gr2 = await self.query("GR", 2, timeout_s=timeout_s)
+                self.soft_max_2 = _parse_cfg_limit(gr2)
+            except OSError:
+                pass
+        self._soft_min = self.soft_min
+        self._soft_max = self.soft_max
+        self._refresh_soft_limit_flag()
+        return {
+            "min": self.soft_min,
+            "max": self.soft_max,
+            "min2": self.soft_min_2,
+            "max2": self.soft_max_2,
+        }
 
     async def stop_rx(self):
         """Cancel the RX task (optional shutdown)."""
@@ -634,19 +672,32 @@ class MC_Client:
         self._accel_mm_s2 = max(float(accel), cfg.MIN_SPEED_MM_S)
         self._cmd("SA", _fmt_arg(self._accel_mm_s2))
 
-    def setSoftLimits(self, min_limit, max_limit):
+    def setSoftLimits(self, min_limit, max_limit, axis=1):
+        """Set soft window via ``SL`` / ``SR`` (does not change physical slider_min/max)."""
+        if axis == 2:
+            self.soft_min_2 = min_limit
+            self.soft_max_2 = max_limit
+            if min_limit is None:
+                self._cmd("SL", "_", "none")
+            else:
+                self._cmd("SL", "_", _fmt_arg(float(min_limit)))
+            if max_limit is None:
+                self._cmd("SR", "_", "none")
+            else:
+                self._cmd("SR", "_", _fmt_arg(float(max_limit)))
+            return
+        self.soft_min = min_limit
+        self.soft_max = max_limit
         self._soft_min = min_limit
         self._soft_max = max_limit
-        self.slider_min = min_limit
-        self.slider_max = max_limit
         if min_limit is None:
-            self._cmd("CS", "slider_min none")
+            self._cmd("SL", "none")
         else:
-            self._cmd("CS", "slider_min %s" % _fmt_arg(float(min_limit)))
+            self._cmd("SL", _fmt_arg(float(min_limit)))
         if max_limit is None:
-            self._cmd("CS", "slider_max none")
+            self._cmd("SR", "none")
         else:
-            self._cmd("CS", "slider_max %s" % _fmt_arg(float(max_limit)))
+            self._cmd("SR", _fmt_arg(float(max_limit)))
         self._refresh_soft_limit_flag()
 
     def enable(self, on):

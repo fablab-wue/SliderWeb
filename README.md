@@ -41,6 +41,7 @@ GPIO numbers match **JKSlider** on a Pico (`SliderCtrl` `UIC_config` / `MC_confi
 | LED R | GP2 | PWM, common-cathode, `LED_ACTIVE_HIGH = True` |
 | LED G | GP3 | ≈ 5 mA per channel from 3.3 V |
 | LED B | GP4 | |
+| CAMERA_CTRL | GP15 | Timelapse shutter pulse (`CAMERA_PULSE_MS`) |
 | WS2812 | — | Off (`PIN_NEOPIXEL = None`) |
 | 5 V / GND | VSYS / GND | Same 4-wire as SliderCtrl. Prefer **one** 5 V source (MC cable *or* USB). |
 
@@ -67,6 +68,28 @@ mpremote fs cp -r board/: /
 
 ## JSON contract (`/ws` and `GET /api/status`)
 
+On each WebSocket connect the board first sends a **`hello`** snapshot (also `GET /api/hello`), then periodic status.
+
+**Hello** (reconnect / cache fill):
+
+```json
+{
+  "t": "hello",
+  "linked": true,
+  "config": { "slider_min": 0, "slider_max": 600, "max_speed": 100 },
+  "soft": { "min": 12.0, "max": 480.0, "min2": null, "max2": null },
+  "session": { "enabled": true, "ss": 40.0, "sa": 100.0 },
+  "task": null
+}
+```
+
+- `config` — full `CG` map; **physical** `slider_min`/`slider_max` never change for the slider
+- `soft` — live soft window from `GL`/`GR` (set via `SL`/`SR`); re-read on every hello
+- `session` — commanded ENABLE / SPEED / ACCEL
+- `task` — active Pico task or `null`
+
+**Status** (excerpt):
+
 ```json
 {
   "state": "M",
@@ -74,28 +97,50 @@ mpremote fs cp -r board/: /
   "pos": 12.3, "spd": 0.5, "acc": 20.0, "tgt": 100.0,
   "ss": 40.0, "spd_min": 1.0, "max_speed": 100.0,
   "slider_min": 0, "slider_max": 600,
-  "line1": "Cruising R",
-  "line2": "Near limit",
+  "soft_min": 12.0, "soft_max": 480.0,
+  "session": { "enabled": true, "ss": 40.0, "sa": 100.0 },
+  "task": { "name": "TSK_TL_MSM", "state": "move", "detail": "frame 3/120", "frame": 3, "frames": 120 },
+  "linked": true,
+  "line1": "Task TL",
+  "line2": "running",
   "warn": false
 }
 ```
 
-When `axes` is 2, `pos2` / `spd2` / `acc2` / `tgt2` / `slider_min_2` / `slider_max_2` are included.
+When `axes` is 2, `pos2` / `spd2` / `acc2` / `tgt2` / `slider_min_2` / `slider_max_2` / `soft_min_2` / `soft_max_2` are included.
 
-**Client → board**
+**Client → board** (`/ws` or `POST /api/cmd`):
 
 ```json
-{"t":"btn","n":"MOVE_L","e":"down","ax":1}
-{"t":"btn","n":"MOVE_L","e":"hold","ms":333}
-{"t":"btn","n":"MOVE_L","e":"up","ms":410}
-{"t":"ss","v":40.0}
-{"t":"ax","v":1}
-{"t":"ping"}
+{"wdt":"alive"}
+{"mc":"SS 40"}
+{"mc":"ML"}
+{"task":"TSK_PPM 0 _ 600 _ 1.0"}
+{"task":"TSK_TL_CONT 100 _ 0.004000 0.010000 0.333333 0.100000"}
+{"task":"TSK_TL_MSM 100 _ 120 0.333333 0.100000"}
 ```
 
-`ax`: `1` axis 1, `2` axis 2, `0` both. Buttons: `MOVE_L` `MOVE_R` `FAST_L` `FAST_R` `STOP`.
+- `{"mc":…}` — raw UART line; `SS`/`SA`/`SE` mirror into Pico session. Any command token starting with **`M`** (`MS`/`ML`/`MR`/`MT`/`MH`) cancels an active task (camera line forced **low**), then is forwarded.
+- `{"task":"TSK_…"}` — Pico-owned task (not sent to UART). One task at a time; a new start **replaces** the previous.
+- `{"wdt":"alive"}` — ~1/s. Missing ~2.5 s → board sends `MS` **unless a task is active** (phone sleep must not kill a shoot).
 
-Also: `GET /api/config` (full `CG`), `GET|POST /api/wifi`, `GET|PUT /api/files`, `POST /api/cmd` (same JSON as `/ws` when WebSocket is down).
+**Tasks**
+
+| Task | Args | Notes |
+|------|------|-------|
+| `TSK_PPM` | `pos1 pos1_2 pos2 pos2_2 delay_s` | Ping-pong; `_` = unused axis |
+| `TSK_TL_CONT` | `pos pos2 speed accel trigger_time_s trigger_length_s` | Crawl + periodic shutter; speed/accel from phone (6 decimals OK) |
+| `TSK_TL_MSM` | `pos pos2 frames trigger_time_s trigger_length_s` | Hop shoot; hop SS/SA from `SW_SPEED_TL_MM_S` / `SW_ACCEL_TL_MM_S2` |
+
+Silent clamps: `trigger_time_s ≥ 0.2`, `trigger_length_s ≥ 0.01`. Task cancel (STOP / any `M*` / limit error) drives **CAMERA_CTRL low**.
+
+Phone TL tab: `trigger_time = FACTOR/FPS`, exposure from UI, MSM `frames = ceil((delta/(SS/FACTOR))*FPS)`.
+
+Also: `GET /api/config` (CG map), `GET|POST /api/wifi`, `GET|PUT /api/files`.
+
+**Camera:** `PIN_CAMERA_CTRL` (default GP15). Timelapse tasks pulse active-high for `trigger_length_s`; abort always clears the line.
+
+**Config (hello `config`):** `speed_tl_mm_s`, `accel_tl_mm_s2` — MSM hop motion defaults (`SW_SPEED_TL_MM_S`, `SW_ACCEL_TL_MM_S2`).
 
 ## Preview without a board
 
@@ -111,8 +156,9 @@ Open http://127.0.0.1:8080/
 board/                 copy this tree onto the Pico root (/)
   boot.py  main.py
   MC_client.py         UART client (from SliderCtrl)
-  button_state.py      tap / hold semantics
-  panel_app.py         MOVE / STOP / SS / status lines
+  panel_app.py         thin bridge + hello + WDT + tasks
+  task_runner.py       TSK_PPM / TSK_TL_CONT / TSK_TL_MSM
+  camera_ctrl.py       CAMERA_CTRL pulse (non-blocking + off)
   web_app.py           Microdot + WebSocket
   wifi_portal.py       STA / AP / captive DNS
   led_status.py        RGB PWM GP2/3/4

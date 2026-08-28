@@ -39,11 +39,13 @@ async def main():
     web_task = asyncio.create_task(web.run())
     panel_task = asyncio.create_task(panel.run())
 
-    async def mc_after_dns():
-        dbg(3, "UART wait for DNS")
-        while not wifi._saw_dns:
-            await asyncio.sleep_ms(200)
-        banner_s = float(getattr(cfg, "SW_MC_BANNER_S", 3.0))
+    async def mc_start():
+        """Link SliderMC at power-on (same supply as Pico) — do not wait for phone/DNS."""
+        delay_ms = int(getattr(cfg, "SW_MC_POWER_DELAY_MS", 300))
+        if delay_ms > 0:
+            dbg(3, "UART power settle", delay_ms, "ms")
+            await asyncio.sleep_ms(delay_ms)
+        banner_s = float(getattr(cfg, "SW_MC_BANNER_S", 5.0))
         sim_ok = bool(getattr(cfg, "SW_MC_SIM", True))
         linked = False
         try:
@@ -69,7 +71,7 @@ async def main():
         led_task,
         panel_task,
         web_task,
-        mc_after_dns(),
+        mc_start(),
     )
 
 

@@ -247,6 +247,10 @@ body.axes-2 .info-box {
   transform: translateX(2rem);
 }
 .switch-cap { line-height: 1; }
+.cell-switch.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 
 .btn {
   appearance: none;
@@ -354,6 +358,31 @@ body.axes-2 .info-box {
 
 .tl-msm-row {
   margin-top: 0.55rem;
+}
+
+.cli-stop { grid-column: 1 / -1; }
+.cli-cmd-block {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+.cli-sep {
+  grid-column: 1 / -1;
+  border: 0;
+  border-top: 1px solid #1c2530;
+  margin: 0.35rem 0 0.1rem;
+}
+.cli-cmd {
+  grid-column: 1 / -1;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9rem;
+  margin-top: 0;
+}
+.cli-send {
+  grid-column: 3;
+  justify-self: end;
+  min-width: 5rem;
 }
 
 .axis-row {
@@ -486,7 +515,9 @@ textarea {
   text-align: right;
   color: var(--cyan);
 }
-.letter.dim { opacity: 0; }
+.letter.dim {
+  opacity: 0.45;
+}
 .oled {
   margin-top: 0.25rem;
   color: var(--cyan);

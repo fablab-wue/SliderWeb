@@ -182,6 +182,17 @@ class WebApp:
                 headers={"Content-Type": "application/json"},
             )
 
+        @app.route("/api/hello")
+        async def api_hello(req):
+            try:
+                await web.panel.refresh_hello()
+            except Exception as exc:
+                dbg(2, "api hello refresh", exc)
+            return Response(
+                body=json.dumps(web.panel.hello_dict()),
+                headers={"Content-Type": "application/json"},
+            )
+
         @app.route("/api/config")
         async def api_config(req):
             return Response(
@@ -281,6 +292,14 @@ class WebApp:
             web.clients.append(ws)
             dbg(4, "ws +", len(web.clients))
             try:
+                try:
+                    await web.panel.refresh_hello()
+                except Exception as exc:
+                    dbg(2, "hello refresh", exc)
+                try:
+                    await ws.send(json.dumps(web.panel.hello_dict()))
+                except Exception:
+                    pass
                 await ws.send(json.dumps(web._status_payload()))
                 while True:
                     msg = await ws.receive()

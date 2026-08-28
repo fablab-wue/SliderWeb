@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#0b0d10">
   <title>SliderWeb</title>
-  <link rel="stylesheet" href="/css/app.css?v=4">
+  <link rel="stylesheet" href="/css/app.css?v=5">
 </head>
 <body>
   <div id="offline" class="offline hidden">Link lost…</div>
@@ -18,6 +18,7 @@
     <button class="tab" data-tab="win" title="Window">⍈</button>
     <button class="tab" data-tab="abc" title="Marks A B C">AB</button>
     <button class="tab" data-tab="tl" title="Timelapse">⏲</button>
+    <button class="tab" data-tab="cli" title="CLI" aria-label="CLI">&gt;_</button>
     <button class="tab" data-tab="config" title="Config" aria-label="Config">⚙</button>
     <button class="tab" data-tab="help" title="Help" aria-label="Help">🕮</button>
   </header>
@@ -54,7 +55,7 @@
         <div class="slider-head">
           <div class="slider-meta">
             <span class="name">ACCEL</span>
-            <span class="unit">mm/s²</span>
+            <span class="unit" data-unit="acc" data-axis="1">mm/s²</span>
           </div>
           <span class="num" id="accValHome"><span class="int">—</span>.<span class="frac">—</span></span>
         </div>
@@ -64,7 +65,7 @@
         <div class="slider-head">
           <div class="slider-meta">
             <span class="name">SPEED</span>
-            <span class="unit">mm/s</span>
+            <span class="unit" data-unit="spd" data-axis="1">mm/s</span>
           </div>
           <span class="num" id="ssValHome"><span class="int">—</span>.<span class="frac">—</span></span>
         </div>
@@ -96,11 +97,17 @@
         <button type="button" class="btn red stop" id="btnStop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
+      <div class="axis-row hidden axis2-only">
+        <span class="cap">Jog axis</span>
+        <button type="button" class="chip active" data-ax="1">1</button>
+        <button type="button" class="chip" data-ax="2">2</button>
+        <button type="button" class="chip" data-ax="0">both</button>
+      </div>
       <div class="slider-block">
         <div class="slider-head">
           <div class="slider-meta">
             <span class="name">SPEED</span>
-            <span class="unit">mm/s</span>
+            <span class="unit" data-unit="spd" data-axis="1">mm/s</span>
           </div>
           <span class="num" id="ssVal"><span class="int">—</span>.<span class="frac">—</span></span>
         </div>
@@ -146,6 +153,17 @@
           </label>
         </div>
         <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
+      </div>
+      <div class="gap"></div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">SPEED</span>
+            <span class="unit" data-unit="spd" data-axis="1">mm/s</span>
+          </div>
+          <span class="num" id="ssValJoy"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="spdSliderJoy" min="0" max="1000" value="200" class="speed">
       </div>
     </div>
   </section>
@@ -199,13 +217,18 @@
           <button type="button" class="btn ochre" data-btn="C">⯈C</button>
           <button type="button" class="btn option opt-mid" data-btn="OPTION">🛆⎇</button>
           <span></span>
-          <button type="button" class="btn ochre" data-btn="AB">A⮔B</button>
-          <button type="button" class="btn ochre" data-btn="BC">B⧎C</button>
+          <button type="button" class="btn ochre" data-btn="AB">A⯇⯈B</button>
+          <button type="button" class="btn ochre" data-btn="BC">B⯇⯈C</button>
           <button type="button" class="btn ochre" data-btn="CA">C⯇⯈A</button>
         </div>
         <button type="button" class="btn red stop" data-btn="STOP">⏹</button>
       </div>
       <div class="gap"></div>
+      <div class="time-to">
+        <span class="cap">Loop wait time [s]</span>
+        <span></span>
+        <input id="loopWaitAbc" type="number" inputmode="decimal" step="0.1" min="0" max="100" value="1.0" placeholder="1.0">
+      </div>
       <div class="time-to">
         <span class="cap">t - Time to move to A/B/C [s]</span>
         <span></span>
@@ -220,7 +243,7 @@
         <div class="slider-head">
           <div class="slider-meta">
             <span class="name">SPEED</span>
-            <span class="unit">mm/s</span>
+            <span class="unit" data-unit="spd" data-axis="1">mm/s</span>
           </div>
           <span class="num" id="ssValAbc"><span class="int">—</span>.<span class="frac">—</span></span>
         </div>
@@ -262,6 +285,11 @@
         <span></span>
         <input id="TL_FPS" type="number" inputmode="numeric" step="1" min="1" max="60" value="30">
       </div>
+      <div class="time-to">
+        <span class="cap">Exposure length</span>
+        <span></span>
+        <input id="TL_EXPOSURE" type="number" inputmode="decimal" step="0.1" min="0.1" max="60" value="0.1">
+      </div>
       <div class="pad-grid tl-msm-row">
         <span></span>
         <span></span>
@@ -270,6 +298,51 @@
           <span class="switch-ui" aria-hidden="true"></span>
           <span class="switch-cap">MSM</span>
         </label>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel hidden" data-show="cli">
+    <div class="panel-fill">
+      <div class="pad-card">
+        <div class="pad-grid">
+          <button type="button" class="btn red stop cli-stop" data-btn="STOP">⏹</button>
+        </div>
+      </div>
+      <div class="slider-block">
+        <div class="slider-head">
+          <div class="slider-meta">
+            <span class="name">SPEED</span>
+            <span class="unit" data-unit="spd" data-axis="1">mm/s</span>
+          </div>
+          <span class="num" id="ssValCli"><span class="int">—</span>.<span class="frac">—</span></span>
+        </div>
+        <input type="range" id="spdSliderCli" min="0" max="1000" value="200" class="speed">
+      </div>
+      <div class="cli-cmd-block">
+        <hr class="cli-sep">
+        <input type="text" id="cmd1" class="cli-cmd" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ochre sm cli-send" id="send1">SEND</button>
+      </div>
+      <div class="cli-cmd-block">
+        <hr class="cli-sep">
+        <input type="text" id="cmd2" class="cli-cmd" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ochre sm cli-send" id="send2">SEND</button>
+      </div>
+      <div class="cli-cmd-block">
+        <hr class="cli-sep">
+        <input type="text" id="cmd3" class="cli-cmd" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ochre sm cli-send" id="send3">SEND</button>
+      </div>
+      <div class="cli-cmd-block">
+        <hr class="cli-sep">
+        <input type="text" id="cmd4" class="cli-cmd" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ochre sm cli-send" id="send4">SEND</button>
+      </div>
+      <div class="cli-cmd-block">
+        <hr class="cli-sep">
+        <input type="text" id="cmd5" class="cli-cmd" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ochre sm cli-send" id="send5">SEND</button>
       </div>
     </div>
   </section>
