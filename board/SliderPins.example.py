@@ -7,7 +7,7 @@ MC_config = {
     "UART_ID": 0,
     "PIN_UART_TX": 16,  # UART0 TX → SliderMC RX
     "PIN_UART_RX": 17,  # UART0 RX ← SliderMC TX
-    "UART_BAUD": 1_000_000,
+    "UART_BAUD": 115_200,
 }
 
 SW_config = {

@@ -1,6 +1,6 @@
 # MC_client — UART client for SliderMC (MicroPython + uasyncio).
 #
-# Copied from SliderCtrl/MC_client.py (Pico UART0 GP16/17 @ 1 Mbaud).
+# Copied from SliderCtrl/MC_client.py (Pico UART0 GP16/17 @ 115200 baud).
 # Wire protocol: https://github.com/fablab-wue/SliderDoc/blob/main/contract/protocol.md
 
 try:
@@ -47,7 +47,7 @@ class MC_Client:
         if rx is None:
             rx = getattr(cfg, "PIN_UART_RX", 17)
         if baud is None:
-            baud = int(getattr(cfg, "UART_BAUD", 1_000_000))
+            baud = int(getattr(cfg, "UART_BAUD", 115_200))
         self._uart_tx = int(tx)
         self._uart_rx = int(rx)
         kw = dict(

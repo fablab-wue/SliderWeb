@@ -8,7 +8,7 @@ Docs: **[SliderDoc](https://github.com/fablab-wue/SliderDoc)**.
 
 ```text
 Phone / tablet  --WLAN / captive AP-->  Pico W / Pico 2 W (this firmware)
-                                          UART0 1 Mbaud  GP16 TX / GP17 RX
+                                          UART0 115200 baud  GP16 TX / GP17 RX
                                         SliderMC (RP2040)
 ```
 
@@ -36,7 +36,7 @@ GPIO numbers match **JKSlider** on a Pico (`SliderCtrl` `UIC_config` / `MC_confi
 
 | Function | GPIO | Notes |
 |----------|------|-------|
-| UART TX → MC RX | GP16 | UART0, 3.3 V, 1 Mbaud, crossed like SliderCtrl |
+| UART TX → MC RX | GP16 | UART0, 3.3 V, 115200 baud, crossed like SliderCtrl |
 | UART RX ← MC TX | GP17 | |
 | LED R | GP2 | PWM, common-cathode, `LED_ACTIVE_HIGH = True` |
 | LED G | GP3 | ≈ 5 mA per channel from 3.3 V |
