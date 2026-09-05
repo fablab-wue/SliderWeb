@@ -90,8 +90,7 @@ class PanelApp:
             self.linked = False
             return
         self.linked = bool(getattr(mc, "linked", True))
-        mc.set_status2_callback(self._on_status2)
-        mc.set_status_callback(self._on_status)
+        mc.set_axis_status_callback(self._on_axis_status)
         mc.set_error_callback(self._on_error)
         if getattr(mc, "_speed_mm_s", None) is not None:
             self._cmd_spd = float(mc._speed_mm_s)
@@ -103,26 +102,18 @@ class PanelApp:
         self.flash("DRV error")
         self.tasks.on_mc_state("E")
 
-    def _on_status(self, state, pos, speed, accel, target):
+    def _on_axis_status(self, axis, state, pos, speed, accel, dest):
         self._act["state"] = state
+        if axis == 2:
+            self._act["pos2"] = pos
+            self._act["spd2"] = speed
+            self._act["acc2"] = accel
+            self._act["tgt2"] = dest
+            return
         self._act["pos"] = pos
         self._act["spd"] = speed
         self._act["acc"] = accel
-        self._act["tgt"] = target
-        self.tasks.on_mc_state(state)
-
-    def _on_status2(
-        self, state, pos, pos2, speed, speed2, accel, accel2, target, target2
-    ):
-        self._act["state"] = state
-        self._act["pos"] = pos
-        self._act["pos2"] = pos2
-        self._act["spd"] = speed
-        self._act["spd2"] = speed2
-        self._act["acc"] = accel
-        self._act["acc2"] = accel2
-        self._act["tgt"] = target
-        self._act["tgt2"] = target2
+        self._act["tgt"] = dest
         self.tasks.on_mc_state(state)
         if state == "H":
             self.mode = "homing"
@@ -753,10 +744,10 @@ class PanelApp:
         return cfg_map
 
     def _sim_push(self):
-        """Dummy verbose as if `#I 0 0 0 0` / 2-axis zeros arrived."""
+        """Dummy verbose as if `#I 0 | 0` arrived."""
         self._sim_n = (self._sim_n + 1) & 0xFFFF
-        self._on_status("I", 0.0, 0.0, 0.0, 0.0)
-        self._on_status2("I", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        self._on_axis_status(2, "I", 0.0, 0.0, 0.0, 0.0)
+        self._on_axis_status(1, "I", 0.0, 0.0, 0.0, 0.0)
 
     async def run(self):
         sim_hz = float(getattr(cfg, "SW_MC_SIM_HZ", 10))
