@@ -704,15 +704,19 @@ class PanelApp:
             if self.sim:
                 return {
                     "axis_count": 2,
-                    "axis2_use": 1,
+                    "axis": 2,
                     "name": "SliderWeb preview",
                     "slider_min": 0.0,
                     "slider_max": 600.0,
+                    "slider_min_1": 0.0,
+                    "slider_max_1": 600.0,
                     "slider_min_2": 0.0,
                     "slider_max_2": 360.0,
                     "max_speed": 100.0,
+                    "max_speed_1": 100.0,
                     "max_speed_2": 100.0,
                     "max_accel": 500.0,
+                    "max_accel_1": 500.0,
                     "max_accel_2": 500.0,
                     "unit_name": "mm",
                     "unit_name_2": "deg",
@@ -721,18 +725,26 @@ class PanelApp:
                 }
             return {
                 "axis_count": 1,
-                "axis2_use": 0,
+                "axis": 1,
             }
         cfg_map = dict(mc.mc_config) if mc.mc_config else {}
         cfg_map["axis_count"] = int(mc.axis_count or 1)
         if mc.slider_min is not None:
             cfg_map["slider_min"] = mc.slider_min
+            cfg_map["slider_min_1"] = mc.slider_min
         if mc.slider_max is not None:
             cfg_map["slider_max"] = mc.slider_max
+            cfg_map["slider_max_1"] = mc.slider_max
         if mc.slider_min_2 is not None:
             cfg_map["slider_min_2"] = mc.slider_min_2
         if mc.slider_max_2 is not None:
             cfg_map["slider_max_2"] = mc.slider_max_2
+        if mc.max_speed is not None:
+            cfg_map["max_speed"] = mc.max_speed
+            cfg_map["max_speed_1"] = mc.max_speed
+        if mc.max_accel is not None:
+            cfg_map["max_accel"] = mc.max_accel
+            cfg_map["max_accel_1"] = mc.max_accel
         cfg_map["speed_tl_mm_s"] = float(getattr(cfg, "SW_SPEED_TL_MM_S", 5.0))
         cfg_map["accel_tl_mm_s2"] = float(getattr(cfg, "SW_ACCEL_TL_MM_S2", 50.0))
         if int(cfg_map.get("axis_count") or 1) >= 2:

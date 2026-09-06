@@ -38,9 +38,12 @@ MOCK = {
     "ss": 40.0,
     "spd_min": 1.0,
     "max_speed": 100.0,
+    "max_speed_1": 100.0,
     # Physical (CG) — immutable in preview
     "slider_min": 0.0,
     "slider_max": 600.0,
+    "slider_min_1": 0.0,
+    "slider_max_1": 600.0,
     "slider_min_2": 0.0,
     "slider_max_2": 360.0,
     # Soft window (GL/GR)
@@ -71,15 +74,19 @@ MOCK = {
 
 CONFIG = {
     "axis_count": 2,
-    "axis2_use": 1,
+    "axis": 2,
     "name": "SliderWeb preview",
     "slider_min": 0.0,
     "slider_max": 600.0,
+    "slider_min_1": 0.0,
+    "slider_max_1": 600.0,
     "slider_min_2": 0.0,
     "slider_max_2": 360.0,
     "max_speed": 100.0,
+    "max_speed_1": 100.0,
     "max_speed_2": 100.0,
     "max_accel": 500.0,
+    "max_accel_1": 500.0,
     "max_accel_2": 500.0,
     "init_speed": 40.0,
     "init_accel": 100.0,
@@ -693,7 +700,7 @@ def _apply_mc(line):
     with _lock:
         if cmd.startswith("M") and _task is not None:
             _task_cancel("move")
-            # Fall through so MS/ML/… still apply after cancel.
+            # Fall through so MS/MJ/… still apply after cancel.
         if cmd == "MS":
             _vel = 0.0
             _vel2 = 0.0
@@ -704,7 +711,7 @@ def _apply_mc(line):
             MOCK["state"] = "I"
             MOCK["line1"] = "Stop"
             return
-        if cmd == "H":
+        if cmd in ("H", "HT"):
             _vel = 0.0
             _vel2 = 0.0
             _tgt = None
@@ -746,25 +753,6 @@ def _apply_mc(line):
             except ValueError:
                 return
             MOCK["session"]["sa"] = _sa
-            return
-        if cmd in ("ML", "MR"):
-            sign = -1.0 if cmd == "ML" else 1.0
-            axis = 1
-            if len(parts) > 1:
-                try:
-                    axis = int(float(parts[1]))
-                except ValueError:
-                    axis = 1
-            if axis == 2:
-                _vel2 = sign * _ss
-                _tgt2 = None
-                MOCK["tgt2"] = None
-            else:
-                _vel = sign * _ss
-                _tgt = None
-                MOCK["tgt"] = None
-            MOCK["state"] = "M"
-            MOCK["line1"] = "Jog"
             return
         if cmd == "MJ":
             pct0 = 0.0
@@ -824,6 +812,22 @@ def _apply_mc(line):
                     pass
             MOCK["state"] = "M"
             MOCK["line1"] = "Goto"
+            return
+        if cmd == "MB":
+            if len(parts) > 1 and parts[1] not in ("_", ""):
+                try:
+                    _tgt = float(MOCK.get("pos") or 0.0) + float(parts[1])
+                    MOCK["tgt"] = _tgt
+                except ValueError:
+                    pass
+            if len(parts) > 2 and parts[2] not in ("_", ""):
+                try:
+                    _tgt2 = float(MOCK.get("pos2") or 0.0) + float(parts[2])
+                    MOCK["tgt2"] = _tgt2
+                except ValueError:
+                    pass
+            MOCK["state"] = "M"
+            MOCK["line1"] = "Move"
             return
         if cmd == "MH":
             _tgt = float(MOCK.get("slider_min") or 0.0)

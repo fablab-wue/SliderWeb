@@ -573,10 +573,14 @@
 
   function jogCmd(dir, axis) {
     dir = uiAxisDir(dir, axis || 1);
-    var cmd = dir < 0 ? "ML" : "MR";
-    if (axis === 2) return cmd + " 2";
-    if (document.body.classList.contains("axes-2")) return cmd + " " + axisMask;
-    return cmd;
+    var pct = dir < 0 ? -100 : 100;
+    if (axis === 2) return "MJ 0 " + pct;
+    if (document.body.classList.contains("axes-2")) {
+      if (axisMask === 2) return "MJ 0 " + pct;
+      if (axisMask === 0) return "MJ " + pct + " " + pct;
+      return "MJ " + pct + " 0";
+    }
+    return "MJ " + pct;
   }
 
   function clearCruise() {
@@ -998,7 +1002,7 @@
       if (name === "STOP") {
         stopMotion();
         haltTimer = setTimeout(function () {
-          if (held[name]) sendMc("H");
+          if (held[name]) sendMc("HT");
         }, HALT_MS);
         disTimer = setTimeout(function () {
           if (held[name]) sendMc("SE 0");
