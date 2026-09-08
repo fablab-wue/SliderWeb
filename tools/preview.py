@@ -74,8 +74,14 @@ MOCK = {
 
 CONFIG = {
     "axis_count": 2,
+    "motors": 2,
+    "servos": 0,
     "axis": 2,
     "name": "SliderWeb preview",
+    "MOTOR_1_min": 0.0,
+    "MOTOR_1_max": 600.0,
+    "MOTOR_2_min": 0.0,
+    "MOTOR_2_max": 360.0,
     "slider_min": 0.0,
     "slider_max": 600.0,
     "slider_min_1": 0.0,

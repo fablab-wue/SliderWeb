@@ -151,7 +151,10 @@ class TaskRunner:
     def _axis_count(self):
         p = self.panel
         if p is not None and getattr(p, "mc", None) is not None:
-            return int(getattr(p.mc, "axis_count", 1) or 1)
+            mc = p.mc
+            if hasattr(mc, "getMotorCount"):
+                return int(mc.getMotorCount() or 1)
+            return int(getattr(mc, "axis_count", 1) or 1)
         if p is not None and getattr(p, "sim", False):
             return 2
         return 1

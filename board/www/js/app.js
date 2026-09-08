@@ -193,6 +193,15 @@
     return Number(v).toFixed(1);
   }
 
+  function motorCount(cfg) {
+    cfg = cfg || {};
+    if (cfg.motors != null && cfg.motors !== "") {
+      var n = Number(cfg.motors);
+      if (n >= 1) return n;
+    }
+    return Number(cfg.axis_count || 1);
+  }
+
   function normalizeUnit(raw) {
     var u = String(raw != null ? raw : "mm").trim();
     if (!u) u = "mm";
@@ -207,7 +216,7 @@
     unitPos = u1;
     unitSpd = u1 + "/s";
     unitAcc = u1 + "/s²";
-    var dual = Number(cfg.axis_count || 1) >= 2;
+    var dual = motorCount(cfg) >= 2;
     var u2 = u1;
     if (dual) {
       if (cfg.unit_name_2 != null && String(cfg.unit_name_2).trim()) {
@@ -241,7 +250,7 @@
     if (!body) return;
     var c = cfgCache;
     var name = c.name != null && String(c.name).trim() ? String(c.name).trim() : "Slider";
-    var dual = Number(c.axis_count || 1) >= 2;
+    var dual = motorCount(c) >= 2;
     var sizeLine =
       "Slider size: " +
       fmtCfg(c.slider_min) +
@@ -484,7 +493,8 @@
     $("oled").classList.toggle("warn", !!d.warn);
     syncEnableUi(session.enabled);
     var axes = d.axes || 1;
-    if (cfgCache.axis_count != null) axes = Number(cfgCache.axis_count) || axes;
+    if (cfgCache.motors != null) axes = Number(cfgCache.motors) || axes;
+    else if (cfgCache.axis_count != null) axes = Number(cfgCache.axis_count) || axes;
     var dual = axes >= 2;
     document.body.classList.toggle("axes-2", dual);
     $("tele2").classList.toggle("hidden", !dual);

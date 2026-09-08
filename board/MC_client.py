@@ -1,6 +1,10 @@
 # MC_client — UART client for SliderMC (MicroPython + uasyncio).
 #
-# Copied from SliderCtrl/MC_client.py (Pico UART0 GP16/17 @ 115200 baud).
+# MC_API surface (duck-typed): start, send/query (up to 6 packed slots), motion
+# (optional extra-axis pos / home(axis)), config setters, getters
+# (motors/servos; packed axis_count from CG axis; getPosition2, …),
+# set_axis_status_callback (per-axis 6-arg). Canonical copy for SliderHost /
+# SliderWeb / ___SliderCtrl.
 # Wire protocol: https://github.com/fablab-wue/SliderDoc/blob/main/contract/protocol.md
 
 try:
@@ -18,7 +22,12 @@ except ImportError:
     Pin = None
 
 import MC_config as cfg
-from dbg import dbg
+
+try:
+    from dbg import dbg
+except ImportError:
+    def dbg(*_a, **_k):
+        pass
 
 
 class MC_Client:
@@ -37,32 +46,43 @@ class MC_Client:
     # Index = McState; '?' = LOCKED (not emitted on UART status).
     MC_STATE_CHARS = ("D", "I", "A", "M", "B", "H", "L", "E", "P", "?")
 
-    def __init__(self, uart_id=None, tx=None, rx=None, baud=None):
-        if UART is None:
-            raise RuntimeError("machine.UART not available")
-        if uart_id is None:
-            uart_id = int(getattr(cfg, "UART_ID", 0))
-        if tx is None:
-            tx = getattr(cfg, "PIN_UART_TX", 16)
-        if rx is None:
-            rx = getattr(cfg, "PIN_UART_RX", 17)
-        if baud is None:
-            baud = int(getattr(cfg, "UART_BAUD", 115_200))
-        self._uart_tx = int(tx)
-        self._uart_rx = int(rx)
-        kw = dict(
-            baudrate=int(baud),
-            tx=Pin(int(tx)),
-            rx=Pin(int(rx)),
-            bits=8,
-            parity=None,
-            stop=1,
-        )
-        try:
-            self._uart = UART(uart_id, rxbuf=2048, **kw)
-        except TypeError:
-            self._uart = UART(uart_id, **kw)
-        dbg(3, "UART", uart_id, "TX", int(tx), "RX", int(rx), baud)
+    def __init__(self, uart_id=None, tx=None, rx=None, baud=None, uart=None):
+        """``uart`` is a duck-typed stream (``.write`` / ``.any`` / ``.read``).
+
+        Pass a pyserial wrapper from the PC host; omit it on Pico to use
+        ``machine.UART``.
+        """
+        if uart is not None:
+            self._uart = uart
+            self._uart_tx = int(tx) if tx is not None else -1
+            self._uart_rx = int(rx) if rx is not None else -1
+            dbg(3, "UART host-stream", baud or getattr(cfg, "UART_BAUD", 115200))
+        else:
+            if UART is None:
+                raise RuntimeError("machine.UART not available")
+            if uart_id is None:
+                uart_id = int(getattr(cfg, "UART_ID", 0))
+            if tx is None:
+                tx = getattr(cfg, "PIN_UART_TX", 16)
+            if rx is None:
+                rx = getattr(cfg, "PIN_UART_RX", 17)
+            if baud is None:
+                baud = int(getattr(cfg, "UART_BAUD", 115_200))
+            self._uart_tx = int(tx)
+            self._uart_rx = int(rx)
+            kw = dict(
+                baudrate=int(baud),
+                tx=Pin(int(tx)),
+                rx=Pin(int(rx)),
+                bits=8,
+                parity=None,
+                stop=1,
+            )
+            try:
+                self._uart = UART(uart_id, rxbuf=2048, **kw)
+            except TypeError:
+                self._uart = UART(uart_id, **kw)
+            dbg(3, "UART", uart_id, "TX", int(tx), "RX", int(rx), baud)
         self._rx_task = None
         self._started = False
         self.linked = False  # True after welcome banner
@@ -87,19 +107,36 @@ class MC_Client:
         self._soft_max_2 = None
         self._soft_min_3 = None
         self._soft_max_3 = None
+        self._soft_min_4 = None
+        self._soft_max_4 = None
+        self._soft_min_5 = None
+        self._soft_max_5 = None
+        self._soft_min_6 = None
+        self._soft_max_6 = None
         self._enabled = None
 
-        self._axis = 1  # 1..3 from CG axis; default 1 until fetchConfig
+        self._motors = 1
+        self._servos = 0
+        self._axis = 1  # packed motors+servos, 1..6
         self._state = None  # I/M/H/L/E/D/...
         self._pos_mm = None
         self._pos_mm_2 = None
         self._pos_mm_3 = None
+        self._pos_mm_4 = None
+        self._pos_mm_5 = None
+        self._pos_mm_6 = None
         self._act_speed_mm_s = None
         self._act_speed_mm_s_2 = None
         self._act_speed_mm_s_3 = None
+        self._act_speed_mm_s_4 = None
+        self._act_speed_mm_s_5 = None
+        self._act_speed_mm_s_6 = None
         self._target_mm = None
         self._target_mm_2 = None
         self._target_mm_3 = None
+        self._target_mm_4 = None
+        self._target_mm_5 = None
+        self._target_mm_6 = None
 
         self._moving = False
         self._homing = False
@@ -116,18 +153,28 @@ class MC_Client:
         self.mc_config = {}
         self.max_speed = None
         self.max_accel = None
-        # Physical travel (CG slider_min/max) — fixed for the slider lifetime.
+        self.motors = 1
+        self.servos = 0
+        # Envelope aliases of packed channels (channel 1 = slider_min).
         self.slider_min = None
         self.slider_max = None
         self.slider_min_2 = None
         self.slider_max_2 = None
         self.slider_min_3 = None
         self.slider_max_3 = None
-        # Soft moving window (GL/GR); init ≈ physical, then set via SL/SR.
+        self.slider_min_4 = None
+        self.slider_max_4 = None
+        self.slider_min_5 = None
+        self.slider_max_5 = None
+        self.slider_min_6 = None
+        self.slider_max_6 = None
+        # Session window (GL/GR / SL/SR); init ≈ envelope.
         self.soft_min = None
         self.soft_max = None
         self.soft_min_2 = None
         self.soft_max_2 = None
+        self.soft_min_3 = None
+        self.soft_max_3 = None
         self.unit_name = None
         # Public McState int; LOCKED until first verbose status.
         self.status = self.MC_STATE_LOCKED
@@ -136,20 +183,27 @@ class MC_Client:
 
     @property
     def axis_count(self):
-        """Active axis count from CG ``axis`` (1, 2, or 3)."""
+        """Packed live-channel count from CG ``motors``+``servos`` (or ``axis``)."""
         return self._axis
 
     def getAxisCount(self):
         return self._axis
+
+    def getMotorCount(self):
+        """STEP/DIR motor count (not packed IA)."""
+        return self._motors
+
+    def getServoCount(self):
+        return self._servos
 
     # --- callbacks ---------------------------------------------------------
 
     def set_axis_status_callback(self, cb):
         """Register per-axis verbose `#…` callback.
 
-        ``cb(axis, state, pos, speed, accel, dest)`` — ``axis`` is 1, 2, or 3.
-        Extra groups fire highest axis first, then 1, so an axis-1 handler
-        already sees later-axis cache/fields. ``None`` unregisters.
+        ``cb(axis, state, pos, speed, accel, dest)`` — ``axis`` is 1..6.
+        Extra groups fire highest fitted axis first, then 1, so an axis-1
+        handler already sees later-axis cache/fields. ``None`` unregisters.
         """
         self._axis_status_cb = cb
 
@@ -185,8 +239,8 @@ class MC_Client:
         """Open RX task, unlock MC with ``\\n``, wait for welcome ``# …``, then ``SV 1``.
 
         On successful banner, reads MC config via ``CG`` into ``mc_config`` /
-        physical ``slider_min`` / ``slider_max``, then soft window via ``GL``/``GR``.
-        Seeds session ``SS``/``SA`` from CG init_speed/init_accel when present.
+        envelopes, then session window via ``GL``/``GR``. Seeds ``SS``/``SA``
+        from CG init_speed/init_accel when present.
         """
         if self._rx_task is None:
             self._rx_task = asyncio.create_task(self._rx_loop())
@@ -214,6 +268,7 @@ class MC_Client:
         self._started = True
         await self.send("SV", 1)
         if self.linked:
+            await self._warn_protocol()
             await self.fetchConfig()
             await self.fetchSoftLimits()
         # Session SS/SA from CG init_speed/init_accel when present (no CS).
@@ -222,6 +277,17 @@ class MC_Client:
         if self._accel_mm_s2 is not None:
             self._cmd("SA", _fmt_arg(self._accel_mm_s2))
         return self.linked
+
+    async def _warn_protocol(self):
+        try:
+            vp = await self.query("VP", timeout_s=0.5)
+        except OSError:
+            return
+        if vp is None:
+            return
+        v = str(vp).strip()
+        if v and v != "3":
+            print("SliderMC protocol %s (expected 3)" % v)
 
     async def fetchConfig(self, settle_ms=150):
         """Send bare ``CG`` and collect all ``CG:key=value`` lines into ``mc_config``."""
@@ -241,43 +307,37 @@ class MC_Client:
             self._cg_collect = None
 
         self.mc_config = dict(collected)
-        self._axis = _parse_axis_count(collected.get("axis"))
+        self._apply_counts(collected)
         un = collected.get("unit_name")
         if un is not None:
             un = str(un).strip()
         self.unit_name = un if un else None
         self.max_speed = _parse_cfg_float(collected.get("max_speed_1"))
         self.max_accel = _parse_cfg_float(collected.get("max_accel_1"))
-        # Physical ends from CG (immutable for the slider lifetime).
-        self.slider_min = _parse_cfg_limit(
-            collected.get("slider_min_1", collected.get("soft_min_1"))
-        )
-        self.slider_max = _parse_cfg_limit(
-            collected.get("slider_max_1", collected.get("soft_max_1"))
-        )
-        self.slider_min_2 = _parse_cfg_limit(
-            collected.get("slider_min_2", collected.get("soft_min_2"))
-        )
-        self.slider_max_2 = _parse_cfg_limit(
-            collected.get("slider_max_2", collected.get("soft_max_2"))
-        )
-        self.slider_min_3 = _parse_cfg_limit(
-            collected.get("slider_min_3", collected.get("soft_min_3"))
-        )
-        self.slider_max_3 = _parse_cfg_limit(
-            collected.get("slider_max_3", collected.get("soft_max_3"))
-        )
-        # Soft defaults to physical until fetchSoftLimits (GL/GR) runs.
-        self.soft_min = self.slider_min
-        self.soft_max = self.slider_max
-        self.soft_min_2 = self.slider_min_2
-        self.soft_max_2 = self.slider_max_2
-        self._soft_min = self.soft_min
-        self._soft_max = self.soft_max
+        pairs = []
+        i = 1
+        while i <= 6:
+            pairs.append(_envelope_from_cfg(collected, i, self._motors))
+            i += 1
+        self.slider_min, self.slider_max = pairs[0]
+        self.slider_min_2, self.slider_max_2 = pairs[1]
+        self.slider_min_3, self.slider_max_3 = pairs[2]
+        self.slider_min_4, self.slider_max_4 = pairs[3]
+        self.slider_min_5, self.slider_max_5 = pairs[4]
+        self.slider_min_6, self.slider_max_6 = pairs[5]
+        self._soft_min = self.slider_min
+        self._soft_max = self.slider_max
         self._soft_min_2 = self.slider_min_2
         self._soft_max_2 = self.slider_max_2
         self._soft_min_3 = self.slider_min_3
         self._soft_max_3 = self.slider_max_3
+        self._soft_min_4 = self.slider_min_4
+        self._soft_max_4 = self.slider_max_4
+        self._soft_min_5 = self.slider_min_5
+        self._soft_max_5 = self.slider_max_5
+        self._soft_min_6 = self.slider_min_6
+        self._soft_max_6 = self.slider_max_6
+        self._sync_public_soft()
         if self.max_speed is not None:
             self._max_speed_mm_s = self.max_speed
         init_speed = _parse_cfg_float(
@@ -293,38 +353,87 @@ class MC_Client:
         self._refresh_soft_limit_flag()
         return self.mc_config
 
+    def _apply_counts(self, collected):
+        motors_s = collected.get("motors")
+        servos_s = collected.get("servos")
+        if motors_s is not None or servos_s is not None:
+            self._motors = _parse_count(motors_s, 1, 3, 1)
+            self._servos = _parse_count(servos_s, 0, 3, 0)
+            n = self._motors + self._servos
+            if n < 1:
+                n = 1
+            if n > 6:
+                n = 6
+            self._axis = n
+        else:
+            self._axis = _parse_axis_count(collected.get("axis"))
+            self._motors = self._axis
+            self._servos = 0
+            if self._motors > 3:
+                self._servos = self._motors - 3
+                self._motors = 3
+        self.motors = self._motors
+        self.servos = self._servos
+
     async def fetchSoftLimits(self, timeout_s=1.0):
-        """Read live soft window via ``GL`` / ``GR`` (axis-2: ``GL 2`` / ``GR 2``)."""
+        """Read live session window via ``GL`` / ``GR`` (pipe groups)."""
+        mins = []
+        maxs = []
         try:
             gl = await self.query("GL", timeout_s=timeout_s)
-            self.soft_min = _parse_cfg_limit(gl)
+            mins = _split_pipe_fields(gl)
         except OSError:
             dbg(2, "GL timeout — keep soft_min", self.soft_min)
         try:
             gr = await self.query("GR", timeout_s=timeout_s)
-            self.soft_max = _parse_cfg_limit(gr)
+            maxs = _split_pipe_fields(gr)
         except OSError:
             dbg(2, "GR timeout — keep soft_max", self.soft_max)
-        if self._axis >= 2:
-            try:
-                gl2 = await self.query("GL", 2, timeout_s=timeout_s)
-                self.soft_min_2 = _parse_cfg_limit(gl2)
-            except OSError:
-                pass
-            try:
-                gr2 = await self.query("GR", 2, timeout_s=timeout_s)
-                self.soft_max_2 = _parse_cfg_limit(gr2)
-            except OSError:
-                pass
-        self._soft_min = self.soft_min
-        self._soft_max = self.soft_max
+        attrs_min = (
+            "_soft_min",
+            "_soft_min_2",
+            "_soft_min_3",
+            "_soft_min_4",
+            "_soft_min_5",
+            "_soft_min_6",
+        )
+        attrs_max = (
+            "_soft_max",
+            "_soft_max_2",
+            "_soft_max_3",
+            "_soft_max_4",
+            "_soft_max_5",
+            "_soft_max_6",
+        )
+        i = 0
+        while i < self._axis and i < 6:
+            if i < len(mins):
+                v = _parse_cfg_limit(mins[i])
+                if v is not None or (i < len(mins) and str(mins[i]).lower() == "none"):
+                    setattr(self, attrs_min[i], v)
+            if i < len(maxs):
+                v = _parse_cfg_limit(maxs[i])
+                if v is not None or (i < len(maxs) and str(maxs[i]).lower() == "none"):
+                    setattr(self, attrs_max[i], v)
+            i += 1
+        self._sync_public_soft()
         self._refresh_soft_limit_flag()
         return {
             "min": self.soft_min,
             "max": self.soft_max,
             "min2": self.soft_min_2,
             "max2": self.soft_max_2,
+            "min3": self.soft_min_3,
+            "max3": self.soft_max_3,
         }
+
+    def _sync_public_soft(self):
+        self.soft_min = self._soft_min
+        self.soft_max = self._soft_max
+        self.soft_min_2 = self._soft_min_2
+        self.soft_max_2 = self._soft_max_2
+        self.soft_min_3 = self._soft_min_3
+        self.soft_max_3 = self._soft_max_3
 
     async def stop_rx(self):
         """Cancel the RX task (optional shutdown)."""
@@ -337,45 +446,56 @@ class MC_Client:
             except asyncio.CancelledError:
                 pass
 
-    def _build_line(self, command, arg=None, arg2=None, arg3=None):
+    def _build_line(self, command, *args):
         """Build one MC command line (skip: extra-axis ``None`` → ``_``)."""
         cmd = str(command).strip()
-        if self._axis < 3:
-            arg3 = None
-        if self._axis < 2:
-            arg2 = None
-        if arg is None and arg2 is None and arg3 is None:
+        slots = list(args)
+        n = self._axis
+        if n < 1:
+            n = 1
+        if n > 6:
+            n = 6
+        if len(slots) > n:
+            slots = slots[:n]
+        while slots and slots[-1] is None:
+            slots.pop()
+        if not slots:
             return cmd
-        if arg3 is not None:
-            return "%s %s %s %s" % (
-                cmd,
-                _fmt_slot(arg),
-                _fmt_slot(arg2),
-                _fmt_slot(arg3),
-            )
-        if arg2 is not None:
-            return "%s %s %s" % (cmd, _fmt_slot(arg), _fmt_slot(arg2))
-        return "%s %s" % (cmd, _fmt_slot(arg))
+        parts = [cmd]
+        for s in slots:
+            parts.append(_fmt_slot(s))
+        return " ".join(parts)
 
-    def _cmd(self, command, arg=None, arg2=None, arg3=None):
+    def _cmd(self, command, *args):
         """Fire-and-forget MC line (sync; preserves UART order)."""
-        self._write_line(self._build_line(command, arg, arg2, arg3))
+        self._write_line(self._build_line(command, *args))
 
     # --- raw send ----------------------------------------------------------
 
-    async def send(self, command, arg=None, arg2=None, arg3=None, wait_answer=False, timeout_s=1.0):
+    async def send(
+        self,
+        command,
+        arg=None,
+        arg2=None,
+        arg3=None,
+        arg4=None,
+        arg5=None,
+        arg6=None,
+        wait_answer=False,
+        timeout_s=1.0,
+    ):
         """Send one MC command.
 
         Builds `COMMAND`, `COMMAND arg`, or extra tokens for live axes.
-        Extra-axis: ``arg is None`` with ``arg2``/``arg3`` set sends skip ``_``.
+        Extra-axis: ``arg is None`` with a later arg set sends skip ``_``.
         1-axis: extra args are ignored; ``arg is None`` is a bare command.
         If wait_answer, awaits matching `TAG:payload` and returns the payload
-        string (spaces kept, e.g. ``IP:100 20`` → ``100 20``); else None.
+        string (spaces kept, e.g. ``IP:100 | 20`` → ``100 | 20``); else None.
         """
         cmd = str(command).strip()
         if not cmd:
             raise ValueError("empty command")
-        line = self._build_line(cmd, arg, arg2, arg3)
+        line = self._build_line(cmd, arg, arg2, arg3, arg4, arg5, arg6)
         tag = cmd.split(None, 1)[0].upper()
 
         waiter = None
@@ -435,11 +555,18 @@ class MC_Client:
         nums = _split_nums(answer)
         if not nums:
             return
-        self._pos_mm = nums[0]
-        if len(nums) > 1:
-            self._pos_mm_2 = nums[1]
-        if len(nums) > 2:
-            self._pos_mm_3 = nums[2]
+        attrs = (
+            "_pos_mm",
+            "_pos_mm_2",
+            "_pos_mm_3",
+            "_pos_mm_4",
+            "_pos_mm_5",
+            "_pos_mm_6",
+        )
+        i = 0
+        while i < len(nums) and i < 6:
+            setattr(self, attrs[i], nums[i])
+            i += 1
 
     # --- RX ----------------------------------------------------------------
 
@@ -519,13 +646,14 @@ class MC_Client:
                 return
 
     def _handle_status(self, line):
-        # #<state> <pos> [<spd> <acc> [<dest>]] [| group2 [| group3]]
-        # Legacy 2-axis (no |): #<state> <pos> <pos2> [<spd> <spd2> <acc> <acc2> [<tgt> <tgt2>]]
+        # #<state> <pos> [<spd> <acc> [<dest>]] [| group2 [| …]]
+        # Empty ``||`` group = idle 0. Trailing idle groups may be omitted.
+        # Legacy 2-axis (no |): #<state> <pos> <pos2> [<spd> <spd2> …]
         body = line[1:].strip()
         if not body:
             return
         groups = [g.strip() for g in body.split("|")]
-        if not groups or not groups[0]:
+        if not groups:
             return
         head = groups[0].split()
         if not head:
@@ -533,36 +661,49 @@ class MC_Client:
         state = head[0]
         if len(state) != 1:
             return
+        groups[0] = " ".join(head[1:]) if len(head) > 1 else ""
 
-        g1 = head[1:]
-        g2 = groups[1].split() if len(groups) > 1 else []
-        g3 = groups[2].split() if len(groups) > 2 else []
-        pos = pos2 = pos3 = speed = speed2 = speed3 = None
-        accel = accel2 = accel3 = target = target2 = target3 = None
-        has_dest1 = has_dest2 = has_dest3 = False
-        if g2:
-            pos, speed, accel, target, has_dest1 = _parse_axis_group(g1)
-            pos2, speed2, accel2, target2, has_dest2 = _parse_axis_group(g2)
-            dual = True
-            if g3:
-                pos3, speed3, accel3, target3, has_dest3 = _parse_axis_group(g3)
-        elif self._axis >= 2:
-            dual = True
-            n = len(g1)
-            pos = _parse_float(g1[0]) if n > 0 else None
-            pos2 = _parse_float(g1[1]) if n > 1 else None
+        nfit = self._axis
+        if nfit < 1:
+            nfit = 1
+        if nfit > 6:
+            nfit = 6
+
+        parsed = []
+        ng = len(groups)
+        toks0 = groups[0].split()
+        legacy = ng == 1 and nfit >= 2 and len(toks0) in (2, 6, 8)
+        if legacy:
+            n = len(toks0)
+            pos = _parse_float(toks0[0]) if n > 0 else None
+            pos2 = _parse_float(toks0[1]) if n > 1 else None
+            speed = speed2 = accel = accel2 = target = target2 = None
+            has1 = has2 = False
             if n >= 6:
-                speed = _parse_float(g1[2])
-                speed2 = _parse_float(g1[3])
-                accel = _parse_float(g1[4])
-                accel2 = _parse_float(g1[5])
+                speed = _parse_float(toks0[2])
+                speed2 = _parse_float(toks0[3])
+                accel = _parse_float(toks0[4])
+                accel2 = _parse_float(toks0[5])
             if n >= 8:
-                target = _parse_float(g1[6])
-                target2 = _parse_float(g1[7])
-                has_dest1 = has_dest2 = True
+                target = _parse_float(toks0[6])
+                target2 = _parse_float(toks0[7])
+                has1 = has2 = True
+            parsed.append((pos, speed, accel, target, has1))
+            parsed.append((pos2, speed2, accel2, target2, has2))
+            while len(parsed) < nfit:
+                parsed.append((0.0, 0.0, 0.0, None, False))
         else:
-            dual = False
-            pos, speed, accel, target, has_dest1 = _parse_axis_group(g1)
+            i = 0
+            while i < nfit:
+                if i < ng:
+                    parts = groups[i].split()
+                    if not parts:
+                        parsed.append((0.0, 0.0, 0.0, None, False))
+                    else:
+                        parsed.append(_parse_axis_group(parts))
+                else:
+                    parsed.append((0.0, 0.0, 0.0, None, False))
+                i += 1
 
         try:
             self.status = self.MC_STATE_CHARS.index(state)
@@ -580,55 +721,58 @@ class MC_Client:
             if self._enabled is None:
                 self._enabled = True
 
-        if pos is not None:
-            self._pos_mm = pos
-        if pos2 is not None:
-            self._pos_mm_2 = pos2
-        if pos3 is not None:
-            self._pos_mm_3 = pos3
-        if speed is not None:
-            self._act_speed_mm_s = speed
-            self._act_vel_mm_s = float(speed)
-        elif state in ("I", "D", "L", "E"):
-            self._act_speed_mm_s = 0.0
-            self._act_vel_mm_s = 0.0
-        if speed2 is not None:
-            self._act_speed_mm_s_2 = speed2
-        elif dual and state in ("I", "D", "L", "E"):
-            self._act_speed_mm_s_2 = 0.0
-        if speed3 is not None:
-            self._act_speed_mm_s_3 = speed3
-        elif g3 and state in ("I", "D", "L", "E"):
-            self._act_speed_mm_s_3 = 0.0
-
-        if has_dest1:
-            self._target_mm = target
-        elif state not in ("M", "H", "A", "B", "P"):
-            self._target_mm = None
-        if dual:
-            if has_dest2:
-                self._target_mm_2 = target2
-            elif state not in ("M", "H", "A", "B", "P"):
-                self._target_mm_2 = None
-        if g3 or pos3 is not None:
-            if has_dest3:
-                self._target_mm_3 = target3
-            elif state not in ("M", "H", "A", "B", "P"):
-                self._target_mm_3 = None
-
-        accel1 = accel
-        if accel1 is None and state in ("I", "D", "L", "E"):
-            accel1 = 0.0
-        if accel1 is None:
-            accel1 = self._accel_mm_s2
-        accel2_cb = accel2
-        if dual:
-            if accel2_cb is None and state in ("I", "D", "L", "E"):
-                accel2_cb = 0.0
-        accel3_cb = accel3
-        if g3 or pos3 is not None:
-            if accel3_cb is None and state in ("I", "D", "L", "E"):
-                accel3_cb = 0.0
+        pos_attrs = (
+            "_pos_mm",
+            "_pos_mm_2",
+            "_pos_mm_3",
+            "_pos_mm_4",
+            "_pos_mm_5",
+            "_pos_mm_6",
+        )
+        spd_attrs = (
+            "_act_speed_mm_s",
+            "_act_speed_mm_s_2",
+            "_act_speed_mm_s_3",
+            "_act_speed_mm_s_4",
+            "_act_speed_mm_s_5",
+            "_act_speed_mm_s_6",
+        )
+        tgt_attrs = (
+            "_target_mm",
+            "_target_mm_2",
+            "_target_mm_3",
+            "_target_mm_4",
+            "_target_mm_5",
+            "_target_mm_6",
+        )
+        idle = state in ("I", "D", "L", "E")
+        moving_st = state in ("M", "H", "A", "B", "P")
+        accels = []
+        i = 0
+        while i < nfit:
+            pos, speed, accel, target, has_dest = parsed[i]
+            if pos is not None:
+                setattr(self, pos_attrs[i], pos)
+            if speed is not None:
+                setattr(self, spd_attrs[i], speed)
+                if i == 0:
+                    self._act_vel_mm_s = float(speed)
+            elif idle:
+                setattr(self, spd_attrs[i], 0.0)
+                if i == 0:
+                    self._act_speed_mm_s = 0.0
+                    self._act_vel_mm_s = 0.0
+            if has_dest:
+                setattr(self, tgt_attrs[i], target)
+            elif not moving_st:
+                setattr(self, tgt_attrs[i], None)
+            acc = accel
+            if acc is None and idle:
+                acc = 0.0
+            if acc is None and i == 0:
+                acc = self._accel_mm_s2
+            accels.append(acc)
+            i += 1
 
         if state == "A":
             self._accelerating = True
@@ -654,26 +798,19 @@ class MC_Client:
 
         self._refresh_soft_limit_flag()
 
-        if g3 or pos3 is not None:
+        ax = nfit
+        while ax >= 1:
+            pos, speed, accel, target, has_dest = parsed[ax - 1]
+            dest = getattr(self, tgt_attrs[ax - 1])
+            if ax == 1:
+                pos = self._pos_mm
+                speed = self._act_speed_mm_s
+            acc = accels[ax - 1] if ax - 1 < len(accels) else accel
             try:
-                self.on_axis_status(
-                    3, state, pos3, speed3, accel3_cb, self._target_mm_3
-                )
+                self.on_axis_status(ax, state, pos, speed, acc, dest)
             except Exception:
                 pass
-        if dual:
-            try:
-                self.on_axis_status(
-                    2, state, pos2, speed2, accel2_cb, self._target_mm_2
-                )
-            except Exception:
-                pass
-        try:
-            self.on_axis_status(
-                1, state, self._pos_mm, self._act_speed_mm_s, accel1, self._target_mm
-            )
-        except Exception:
-            pass
+            ax -= 1
 
     def _refresh_soft_limit_flag(self):
         pos = self._pos_mm
@@ -718,32 +855,139 @@ class MC_Client:
         self._accel_mm_s2 = max(float(accel), cfg.MIN_SPEED_MM_S)
         self._cmd("SA", _fmt_arg(self._accel_mm_s2))
 
-    def setSoftLimits(self, min_limit, max_limit, axis=1):
-        """Set soft window via ``SL`` / ``SR`` (does not change physical slider_min/max)."""
-        if axis == 2:
-            self.soft_min_2 = min_limit
-            self.soft_max_2 = max_limit
-            if min_limit is None:
-                self._cmd("SL", "_", "none")
-            else:
-                self._cmd("SL", "_", _fmt_arg(float(min_limit)))
-            if max_limit is None:
-                self._cmd("SR", "_", "none")
-            else:
-                self._cmd("SR", "_", _fmt_arg(float(max_limit)))
+    def setLeft(
+        self,
+        pos=None,
+        pos2=None,
+        pos3=None,
+        pos4=None,
+        pos5=None,
+        pos6=None,
+    ):
+        """Session working-window left (`SL`). All None = bare reset to envelope.
+
+        Extra axes: ``None`` on one axis sends skip ``_``. To clear a side to
+        session None, pass the string ``"none"`` or use ``setSoftLimits``.
+        """
+        slots = (pos, pos2, pos3, pos4, pos5, pos6)
+        if all(s is None for s in slots):
+            self._cmd("SL")
+            self._soft_min = self.slider_min
+            if self._axis >= 2:
+                self._soft_min_2 = self.slider_min_2
+            if self._axis >= 3:
+                self._soft_min_3 = self.slider_min_3
+            if self._axis >= 4:
+                self._soft_min_4 = self.slider_min_4
+            if self._axis >= 5:
+                self._soft_min_5 = self.slider_min_5
+            if self._axis >= 6:
+                self._soft_min_6 = self.slider_min_6
+        else:
+            self._cmd("SL", pos, pos2, pos3, pos4, pos5, pos6)
+            self._apply_window_slot("_soft_min", pos, self.slider_min)
+            if self._axis >= 2:
+                self._apply_window_slot("_soft_min_2", pos2, self.slider_min_2)
+            if self._axis >= 3:
+                self._apply_window_slot("_soft_min_3", pos3, self.slider_min_3)
+            if self._axis >= 4:
+                self._apply_window_slot("_soft_min_4", pos4, self.slider_min_4)
+            if self._axis >= 5:
+                self._apply_window_slot("_soft_min_5", pos5, self.slider_min_5)
+            if self._axis >= 6:
+                self._apply_window_slot("_soft_min_6", pos6, self.slider_min_6)
+        self._sync_public_soft()
+        self._refresh_soft_limit_flag()
+
+    def setRight(
+        self,
+        pos=None,
+        pos2=None,
+        pos3=None,
+        pos4=None,
+        pos5=None,
+        pos6=None,
+    ):
+        """Session working-window right (`SR`). All None = bare reset to envelope."""
+        slots = (pos, pos2, pos3, pos4, pos5, pos6)
+        if all(s is None for s in slots):
+            self._cmd("SR")
+            self._soft_max = self.slider_max
+            if self._axis >= 2:
+                self._soft_max_2 = self.slider_max_2
+            if self._axis >= 3:
+                self._soft_max_3 = self.slider_max_3
+            if self._axis >= 4:
+                self._soft_max_4 = self.slider_max_4
+            if self._axis >= 5:
+                self._soft_max_5 = self.slider_max_5
+            if self._axis >= 6:
+                self._soft_max_6 = self.slider_max_6
+        else:
+            self._cmd("SR", pos, pos2, pos3, pos4, pos5, pos6)
+            self._apply_window_slot("_soft_max", pos, self.slider_max)
+            if self._axis >= 2:
+                self._apply_window_slot("_soft_max_2", pos2, self.slider_max_2)
+            if self._axis >= 3:
+                self._apply_window_slot("_soft_max_3", pos3, self.slider_max_3)
+            if self._axis >= 4:
+                self._apply_window_slot("_soft_max_4", pos4, self.slider_max_4)
+            if self._axis >= 5:
+                self._apply_window_slot("_soft_max_5", pos5, self.slider_max_5)
+            if self._axis >= 6:
+                self._apply_window_slot("_soft_max_6", pos6, self.slider_max_6)
+        self._sync_public_soft()
+        self._refresh_soft_limit_flag()
+
+    def _apply_window_slot(self, attr, val, envelope):
+        if val is None or (isinstance(val, str) and val == "_"):
             return
-        self.soft_min = min_limit
-        self.soft_max = max_limit
-        self._soft_min = min_limit
-        self._soft_max = max_limit
+        if isinstance(val, str) and val.lower() == "none":
+            setattr(self, attr, envelope)
+            return
+        setattr(self, attr, float(val))
+
+    def getLeft(self):
+        """Cached effective left (envelope after fetchConfig / bare `SL` / `none`)."""
+        return self._soft_min
+
+    def getRight(self):
+        """Cached effective right (envelope after fetchConfig / bare `SR` / `none`)."""
+        return self._soft_max
+
+    def getLeft2(self):
+        return self._soft_min_2
+
+    def getRight2(self):
+        return self._soft_max_2
+
+    def getLeft3(self):
+        return self._soft_min_3
+
+    def getRight3(self):
+        return self._soft_max_3
+
+    def setSoftLimits(self, min_limit, max_limit, min_limit_2=None, max_limit_2=None):
+        """Session working window via `SL`/`SR` (does not persist envelopes).
+
+        On 2-axis MC, pass ``min_limit_2`` / ``max_limit_2`` to set axis 2 in the
+        same call. ``None`` on a 2-axis side sends skip ``_`` (unchanged).
+        """
         if min_limit is None:
             self._cmd("SL", "none")
+            self._soft_min = self.slider_min
+        elif min_limit_2 is not None and self._axis >= 2:
+            self.setLeft(min_limit, min_limit_2)
         else:
-            self._cmd("SL", _fmt_arg(float(min_limit)))
+            self.setLeft(min_limit)
         if max_limit is None:
             self._cmd("SR", "none")
+            self._soft_max = self.slider_max
+        elif max_limit_2 is not None and self._axis >= 2:
+            self.setRight(max_limit, max_limit_2)
         else:
-            self._cmd("SR", _fmt_arg(float(max_limit)))
+            self.setRight(max_limit)
+        self._sync_public_soft()
         self._refresh_soft_limit_flag()
 
     def enable(self, on):
@@ -832,55 +1076,83 @@ class MC_Client:
     def isDRVErrorActive(self):
         return self._drv_error_active or self._state == "E"
 
-    def setPosition(self, position_mm=0, position2=None, position3=None):
+    def setPosition(
+        self,
+        position_mm=0,
+        position2=None,
+        position3=None,
+        position4=None,
+        position5=None,
+        position6=None,
+    ):
         """Redefine reported pose (`SP`). ``0`` / omitted = here is zero."""
-        self._cmd("SP", position_mm, position2, position3)
+        self._cmd("SP", position_mm, position2, position3, position4, position5, position6)
 
-    async def query(self, command, arg=None, arg2=None, arg3=None, timeout_s=1.0):
+    async def query(
+        self,
+        command,
+        arg=None,
+        arg2=None,
+        arg3=None,
+        arg4=None,
+        arg5=None,
+        arg6=None,
+        timeout_s=1.0,
+    ):
         """Send a get/is/config command and return the answer payload string."""
         return await self.send(
-            command, arg, arg2, arg3, wait_answer=True, timeout_s=timeout_s
+            command,
+            arg,
+            arg2,
+            arg3,
+            arg4,
+            arg5,
+            arg6,
+            wait_answer=True,
+            timeout_s=timeout_s,
         )
 
     # --- motion API (sync) -------------------------------------------------
 
-    def moveTo(self, position, position2=None, position3=None):
+    def moveTo(
+        self,
+        position,
+        position2=None,
+        position3=None,
+        position4=None,
+        position5=None,
+        position6=None,
+    ):
         """Absolute move. Extra-axis: ``moveTo(None, pos2)`` → ``MT _ pos2``."""
-        self._cmd("MT", position, position2, position3)
+        self._cmd("MT", position, position2, position3, position4, position5, position6)
 
-    def moveBy(self, dist, dist2=None, dist3=None):
+    def moveBy(
+        self,
+        dist,
+        dist2=None,
+        dist3=None,
+        dist4=None,
+        dist5=None,
+        dist6=None,
+    ):
         """Relative move. Extra-axis: ``moveBy(None, d2)`` → ``MB _ d2``."""
-        self._cmd("MB", dist, dist2, dist3)
+        self._cmd("MB", dist, dist2, dist3, dist4, dist5, dist6)
 
-    def move(self, speed, axis_mask=None):
-        """Continuous jog. ``axis_mask`` 0=all, 1=axis1, 2=axis2 (ignored if 1-axis)."""
+    def move(self, speed):
+        # Hold-to-jog: SS then MJ ±100 (firmware rejects out-of-window MT).
         speed = float(speed)
         if abs(speed) < 1e-9:
             self._cmd("MS")
             return
         self._speed_mm_s = abs(speed)
         self._cmd("SS", _fmt_arg(abs(speed)))
-        pct = 100 if speed > 0 else -100
-        if self._axis >= 2 and axis_mask is not None:
-            mask = int(axis_mask)
-            if mask == 0:
-                if self._axis >= 3:
-                    self._cmd("MJ", pct, pct, pct)
-                else:
-                    self._cmd("MJ", pct, pct)
-            elif mask == 2:
-                self._cmd("MJ", 0, pct)
-            elif mask == 3:
-                self._cmd("MJ", 0, 0, pct)
-            else:
-                self._cmd("MJ", pct, 0)
-        else:
-            self._cmd("MJ", pct)
+        self._cmd("MJ", 100 if speed > 0 else -100)
 
     def home(self, axis=None):
         """Homing. ``axis`` None → ``MH`` (MC defaults to 1); ``1``/``2``/``3`` → ``MH n``.
 
-        Extra axes are a no-op when ``axis_count`` is below that number.
+        Extra motors are a no-op when ``getMotorCount()`` is below that number.
+        Servo letters are rejected by the MC — do not home servos.
         """
         self._motion_task = asyncio.create_task(self._home_coro(axis))
         return self._motion_task
@@ -888,7 +1160,7 @@ class MC_Client:
     async def _home_coro(self, axis=None):
         if axis is not None:
             axis = int(axis)
-            if axis > self._axis:
+            if axis > self._motors:
                 return
             self._cmd("MH", axis)
         else:
@@ -924,15 +1196,19 @@ class MC_Client:
 
 
 def _parse_axis_count(s):
-    """Parse CG ``axis`` (1|2|3). Missing/bad → 1."""
+    """Parse packed CG ``axis`` (1..6). Missing/bad → 1."""
+    return _parse_count(s, 1, 6, 1)
+
+
+def _parse_count(s, lo, hi, default):
     n = _parse_float(s)
     if n is None:
-        return 1
+        return default
     n = int(n)
-    if n < 1:
-        return 1
-    if n > 3:
-        return 3
+    if n < lo:
+        return lo
+    if n > hi:
+        return hi
     return n
 
 
@@ -966,16 +1242,48 @@ def _parse_cfg_limit(s):
     return _parse_cfg_float(s)
 
 
+def _envelope_from_cfg(collected, n, motors):
+    """Packed channel ``n`` (1-based): MOTOR_/SERVO_ then axis_min_N then legacy."""
+    mn = mx = None
+    if n <= motors:
+        mn = _parse_cfg_limit(collected.get("MOTOR_%d_min" % n))
+        mx = _parse_cfg_limit(collected.get("MOTOR_%d_max" % n))
+    else:
+        s = n - motors
+        mn = _parse_cfg_limit(collected.get("SERVO_%d_min" % s))
+        mx = _parse_cfg_limit(collected.get("SERVO_%d_max" % s))
+    if mn is None:
+        mn = _parse_cfg_limit(collected.get("axis_min_%d" % n))
+    if mn is None:
+        mn = _parse_cfg_limit(collected.get("slider_min_%d" % n))
+    if mn is None:
+        mn = _parse_cfg_limit(collected.get("soft_min_%d" % n))
+    if mx is None:
+        mx = _parse_cfg_limit(collected.get("axis_max_%d" % n))
+    if mx is None:
+        mx = _parse_cfg_limit(collected.get("slider_max_%d" % n))
+    if mx is None:
+        mx = _parse_cfg_limit(collected.get("soft_max_%d" % n))
+    return mn, mx
+
+
 def _split_nums(s):
-    """Split a query payload into floats (``'100 20'`` → ``[100.0, 20.0]``)."""
+    """Split a query payload into floats (``'100 | 20'`` → ``[100.0, 20.0]``)."""
     out = []
     if s is None:
         return out
-    for part in str(s).split():
+    t = str(s).replace("|", " ")
+    for part in t.split():
         v = _parse_float(part)
         if v is not None:
             out.append(v)
     return out
+
+
+def _split_pipe_fields(s):
+    if s is None:
+        return []
+    return [p.strip() for p in str(s).split("|")]
 
 
 def _fmt_arg(v):
