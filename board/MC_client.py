@@ -236,7 +236,7 @@ class MC_Client:
     # --- lifecycle ---------------------------------------------------------
 
     async def start(self, banner_timeout_s=3.0):
-        """Open RX task, unlock MC with ``\\n``, wait for welcome ``# …``, then ``SV 1``.
+        """Open RX task, unlock MC with ``VH\\n``, wait for welcome ``# …``, then ``SV 1``.
 
         On successful banner, reads MC config via ``CG`` into ``mc_config`` /
         envelopes, then session window via ``GL``/``GR``. Seeds ``SS``/``SA``
@@ -253,7 +253,7 @@ class MC_Client:
         while not self._banner_event.is_set():
             if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
                 break
-            self._uart.write(b"\n")
+            self._uart.write(b"VH\n")
             try:
                 await self._wait_event(self._banner_event, 0.1)
                 got_banner = True
@@ -1178,8 +1178,20 @@ class MC_Client:
         self._cmd("MS")
 
     def halt(self):
-        self._cmd("HT")
+        self._cmd("ME")
         self._enabled = False
+
+    def cameraTrigger(self, ms=100):
+        if ms == 100:
+            self._cmd("CT")
+        else:
+            self._cmd("CT", int(ms))
+
+    def beep(self, ms=100):
+        if ms == 100:
+            self._cmd("BE")
+        else:
+            self._cmd("BE", int(ms))
 
     async def wait(self):
         t = self._motion_task

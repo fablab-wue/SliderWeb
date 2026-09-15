@@ -1012,7 +1012,7 @@
       if (name === "STOP") {
         stopMotion();
         haltTimer = setTimeout(function () {
-          if (held[name]) sendMc("HT");
+          if (held[name]) sendMc("ME");
         }, HALT_MS);
         disTimer = setTimeout(function () {
           if (held[name]) sendMc("SE 0");

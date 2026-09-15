@@ -717,7 +717,7 @@ def _apply_mc(line):
             MOCK["state"] = "I"
             MOCK["line1"] = "Stop"
             return
-        if cmd in ("H", "HT"):
+        if cmd in ("H", "HT", "ME"):
             _vel = 0.0
             _vel2 = 0.0
             _tgt = None
