@@ -3,7 +3,7 @@
 # MC_API surface (duck-typed): start, send/query (up to 6 packed slots), motion
 # (optional extra-axis pos / home(axis)), config setters, getters
 # (motors/servos; packed axis_count from CG axis; getPosition2, …),
-# set_axis_status_callback (per-axis 6-arg). Canonical copy for SliderHost /
+# set_axis_status_callback (per-axis 6-arg). Canonical copy for SliderMoCo /
 # SliderWeb / ___SliderCtrl.
 # Wire protocol: https://github.com/fablab-wue/SliderDoc/blob/main/contract/protocol.md
 
@@ -12,8 +12,19 @@ try:
 except ImportError:
     import asyncio
 
+if not hasattr(asyncio, "sleep_ms"):
+    async def _sleep_ms(ms):
+        await asyncio.sleep(ms / 1000.0)
+
+    asyncio.sleep_ms = _sleep_ms
+
 import math
 import time
+
+if not hasattr(time, "ticks_ms"):
+    time.ticks_ms = lambda: int(time.monotonic() * 1000)
+    time.ticks_diff = lambda a, b: a - b
+    time.ticks_add = lambda a, b: a + b
 
 try:
     from machine import UART, Pin
@@ -45,6 +56,9 @@ class MC_Client:
     MC_STATE_LOCKED = 8
     # Index = McState; '?' = LOCKED (not emitted on UART status).
     MC_STATE_CHARS = ("D", "I", "A", "M", "B", "H", "L", "E", "P", "?")
+
+    BANNER_PREFIX = "# MC V1 -"
+    EXPECTED_PROTO = "1"
 
     def __init__(self, uart_id=None, tx=None, rx=None, baud=None, uart=None):
         """``uart`` is a duck-typed stream (``.write`` / ``.any`` / ``.read``).
@@ -85,7 +99,11 @@ class MC_Client:
             dbg(3, "UART", uart_id, "TX", int(tx), "RX", int(rx), baud)
         self._rx_task = None
         self._started = False
-        self.linked = False  # True after welcome banner
+        self.linked = False  # True after welcome banner + VP
+        self.banner_line = ""
+        self.banner_name = ""
+        self.link_reason = ""
+        self._reboot_banner = False
         self._rx_buf = b""
 
         self._banner_event = asyncio.Event()
@@ -175,6 +193,12 @@ class MC_Client:
         self.soft_max_2 = None
         self.soft_min_3 = None
         self.soft_max_3 = None
+        self.soft_min_4 = None
+        self.soft_max_4 = None
+        self.soft_min_5 = None
+        self.soft_max_5 = None
+        self.soft_min_6 = None
+        self.soft_max_6 = None
         self.unit_name = None
         # Public McState int; LOCKED until first verbose status.
         self.status = self.MC_STATE_LOCKED
@@ -235,59 +259,89 @@ class MC_Client:
 
     # --- lifecycle ---------------------------------------------------------
 
-    async def start(self, banner_timeout_s=3.0):
-        """Open RX task, unlock MC with ``VH\\n``, wait for welcome ``# …``, then ``SV 1``.
+    async def start(self, banner_timeout_s=5.0):
+        """Unlock with ``VH\\n``, require ``# MC V1 -`` plus ``VP:1``, then ``SV 1``.
 
-        On successful banner, reads MC config via ``CG`` into ``mc_config`` /
+        On success, reads MC config via ``CG`` into ``mc_config`` /
         envelopes, then session window via ``GL``/``GR``. Seeds ``SS``/``SA``
-        from CG init_speed/init_accel when present.
+        from CG init_speed/init_accel when present. No session/motion lines
+        until identity passes.
         """
         if self._rx_task is None:
             self._rx_task = asyncio.create_task(self._rx_loop())
+        self._started = True
+        return await self._identify(banner_timeout_s)
+
+    async def _identify(self, banner_timeout_s=5.0):
+        """Banner prefix + VP, then SV/CG/GL/GR. Fail closed (no mock here)."""
+        self.linked = False
+        self._reboot_banner = False
+        got_banner = await self._wait_banner(banner_timeout_s)
+        if not got_banner:
+            self.link_reason = "timeout"
+            print(
+                "SliderMC banner timeout (check UART wiring / baud) - UNLINKED"
+            )
+            return False
+        print("MC welcome", self.banner_line)
+        if not await self._check_protocol():
+            return False
+        await self.send("SV", 1)
+        await self.fetchConfig()
+        cfgd = self.mc_config or {}
+        if "axis" not in cfgd and "max_speed" not in cfgd and "max_speed_1" not in cfgd:
+            self.link_reason = "not an MC"
+            print("not an MC (no CG axis/max_speed)")
+            return False
+        await self.fetchSoftLimits()
+        if self._speed_mm_s is not None:
+            self._cmd("SS", _fmt_arg(self._speed_mm_s))
+        if self._accel_mm_s2 is not None:
+            self._cmd("SA", _fmt_arg(self._accel_mm_s2))
+        self.linked = True
+        self.link_reason = "ok"
+        return True
+
+    async def _wait_banner(self, banner_timeout_s):
+        if self._banner_event.is_set() and self.banner_line:
+            return True
         self._banner_event.clear()
         total_ms = int(float(banner_timeout_s) * 1000)
         if total_ms < 1:
             total_ms = 1
         deadline = time.ticks_add(time.ticks_ms(), total_ms)
-        got_banner = False
         while not self._banner_event.is_set():
             if time.ticks_diff(deadline, time.ticks_ms()) <= 0:
                 break
-            self._uart.write(b"VH\n")
+            try:
+                self._uart.write(b"VH\n")
+            except Exception as exc:
+                self._mark_lost(exc)
+                await asyncio.sleep_ms(100)
+                continue
             try:
                 await self._wait_event(self._banner_event, 0.1)
-                got_banner = True
                 break
             except OSError:
                 continue
-        if not got_banner and not self._banner_event.is_set():
-            print(
-                "SliderMC banner timeout (check UART wiring / baud) — continuing without MC"
-            )
-        self.linked = bool(got_banner or self._banner_event.is_set())
-        self._started = True
-        await self.send("SV", 1)
-        if self.linked:
-            await self._warn_protocol()
-            await self.fetchConfig()
-            await self.fetchSoftLimits()
-        # Session SS/SA from CG init_speed/init_accel when present (no CS).
-        if self._speed_mm_s is not None:
-            self._cmd("SS", _fmt_arg(self._speed_mm_s))
-        if self._accel_mm_s2 is not None:
-            self._cmd("SA", _fmt_arg(self._accel_mm_s2))
-        return self.linked
+        return bool(self._banner_event.is_set() and self.banner_line)
 
-    async def _warn_protocol(self):
+    async def _check_protocol(self):
+        vp = None
         try:
             vp = await self.query("VP", timeout_s=0.5)
         except OSError:
-            return
+            vp = None
         if vp is None:
-            return
+            self.link_reason = "not an MC"
+            print("not an MC (no VP)")
+            return False
         v = str(vp).strip()
-        if v and v != "3":
-            print("SliderMC protocol %s (expected 3)" % v)
+        if v != self.EXPECTED_PROTO:
+            self.link_reason = "protocol %s" % v
+            print("not an MC / protocol %s (expected %s)" % (v, self.EXPECTED_PROTO))
+            return False
+        return True
 
     async def fetchConfig(self, settle_ms=150):
         """Send bare ``CG`` and collect all ``CG:key=value`` lines into ``mc_config``."""
@@ -425,6 +479,12 @@ class MC_Client:
             "max2": self.soft_max_2,
             "min3": self.soft_min_3,
             "max3": self.soft_max_3,
+            "min4": self.soft_min_4,
+            "max4": self.soft_max_4,
+            "min5": self.soft_min_5,
+            "max5": self.soft_max_5,
+            "min6": self.soft_min_6,
+            "max6": self.soft_max_6,
         }
 
     def _sync_public_soft(self):
@@ -434,6 +494,12 @@ class MC_Client:
         self.soft_max_2 = self._soft_max_2
         self.soft_min_3 = self._soft_min_3
         self.soft_max_3 = self._soft_max_3
+        self.soft_min_4 = self._soft_min_4
+        self.soft_max_4 = self._soft_max_4
+        self.soft_min_5 = self._soft_min_5
+        self.soft_max_5 = self._soft_max_5
+        self.soft_min_6 = self._soft_min_6
+        self.soft_max_6 = self._soft_max_6
 
     async def stop_rx(self):
         """Cancel the RX task (optional shutdown)."""
@@ -518,7 +584,20 @@ class MC_Client:
 
     def _write_line(self, line):
         data = (str(line).rstrip("\r\n") + "\n").encode("ascii")
-        self._uart.write(data)
+        try:
+            self._uart.write(data)
+        except Exception as exc:
+            self._mark_lost(exc)
+
+    def _mark_lost(self, exc=None):
+        was = self.linked
+        self.linked = False
+        if was or self.link_reason == "ok":
+            self.link_reason = "lost"
+            if exc is not None:
+                print("MC lost", exc)
+            else:
+                print("MC lost")
 
     async def _wait_event(self, ev, timeout_s):
         ms = int(float(timeout_s) * 1000)
@@ -572,12 +651,19 @@ class MC_Client:
 
     async def _rx_loop(self):
         while True:
-            n = self._uart.any()
-            if n:
-                chunk = self._uart.read(n)
-                if chunk:
-                    self._rx_buf += chunk
-                    self._drain_lines()
+            try:
+                n = self._uart.any()
+                if n:
+                    chunk = self._uart.read(n)
+                    if chunk:
+                        self._rx_buf += chunk
+                        self._drain_lines()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._mark_lost(exc)
+                await asyncio.sleep_ms(200)
+                continue
             await asyncio.sleep_ms(2)
 
     def _drain_lines(self):
@@ -601,8 +687,20 @@ class MC_Client:
         if not line:
             return
 
-        if line.startswith("# "):
+        if line.startswith(self.BANNER_PREFIX):
+            self.banner_line = line
+            self.banner_name = line[len(self.BANNER_PREFIX) :].strip()
+            if self.linked:
+                self.linked = False
+                self._reboot_banner = True
+                self.link_reason = "lost"
+                print("MC reboot banner")
             self._banner_event.set()
+            return
+
+        if line.startswith("# "):
+            if not self.linked:
+                print("MC ignore welcome", line)
             return
 
         if len(line) >= 2 and line[0] == "#" and line[1] != " ":
@@ -718,8 +816,7 @@ class MC_Client:
         if state == "D":
             self._enabled = False
         elif state in ("I", "M", "H", "A", "B", "P"):
-            if self._enabled is None:
-                self._enabled = True
+            self._enabled = True
 
         pos_attrs = (
             "_pos_mm",
@@ -769,8 +866,19 @@ class MC_Client:
             acc = accel
             if acc is None and idle:
                 acc = 0.0
-            if acc is None and i == 0:
-                acc = self._accel_mm_s2
+            moving_here = False
+            if speed is not None:
+                try:
+                    moving_here = abs(float(speed)) > 0.02
+                except (TypeError, ValueError):
+                    moving_here = False
+            if has_dest and target is not None:
+                moving_here = True
+            if acc is None:
+                if idle or not moving_here:
+                    acc = 0.0
+                elif i == 0:
+                    acc = self._accel_mm_s2
             accels.append(acc)
             i += 1
 
@@ -996,29 +1104,33 @@ class MC_Client:
         self._enabled = bool(on)
         self._cmd("SE", 1 if self._enabled else 0)
 
-    def estimateMoveTime(self, distance_mm, speed_mm_s, accel_mm_s2):
+    def estimateMoveTime(self, distance_mm, speed_mm_s, accel_mm_s2, decel_mm_s2=None):
         d = abs(float(distance_mm))
         if d < 1e-9:
             return 0.0
         v = abs(float(speed_mm_s))
         a = abs(float(accel_mm_s2))
-        if v < cfg.MIN_SPEED_MM_S or a < cfg.MIN_SPEED_MM_S:
+        dcl = a if decel_mm_s2 is None else abs(float(decel_mm_s2))
+        if v < cfg.MIN_SPEED_MM_S or a < cfg.MIN_SPEED_MM_S or dcl < cfg.MIN_SPEED_MM_S:
             return 0.0
-        d_r = math.pi * v * v / (4.0 * a)
-        t_r = math.pi * v / (2.0 * a)
-        if 2.0 * d_r <= d:
-            return 2.0 * t_r + (d - 2.0 * d_r) / v
-        v_pk = math.sqrt(2.0 * a * d / math.pi)
-        return math.pi * v_pk / a
+        d_a = math.pi * v * v / (4.0 * a)
+        d_d = math.pi * v * v / (4.0 * dcl)
+        t_a = math.pi * v / (2.0 * a)
+        t_d = math.pi * v / (2.0 * dcl)
+        if d_a + d_d <= d:
+            return t_a + t_d + (d - d_a - d_d) / v
+        v_pk = math.sqrt(4.0 * d / (math.pi * (1.0 / a + 1.0 / dcl)))
+        return math.pi * v_pk * (a + dcl) / (2.0 * a * dcl)
 
-    def estimateMoveTimeTo(self, position_mm, speed_mm_s=None, accel_mm_s2=None):
+    def estimateMoveTimeTo(self, position_mm, speed_mm_s=None, accel_mm_s2=None,
+                           decel_mm_s2=None):
         """Stop-to-stop sine-ramp time from current position to ``position_mm``."""
         if speed_mm_s is None:
             speed_mm_s = self._speed_mm_s if self._speed_mm_s is not None else 0.0
         if accel_mm_s2 is None:
             accel_mm_s2 = self._accel_mm_s2 if self._accel_mm_s2 is not None else 0.0
         return self.estimateMoveTime(
-            float(position_mm) - self.getPosition(), speed_mm_s, accel_mm_s2
+            float(position_mm) - self.getPosition(), speed_mm_s, accel_mm_s2, decel_mm_s2
         )
 
     # --- getters -----------------------------------------------------------
@@ -1031,6 +1143,15 @@ class MC_Client:
 
     def getPosition3(self):
         return self._pos_mm_3 if self._pos_mm_3 is not None else 0.0
+
+    def getPosition4(self):
+        return self._pos_mm_4 if self._pos_mm_4 is not None else 0.0
+
+    def getPosition5(self):
+        return self._pos_mm_5 if self._pos_mm_5 is not None else 0.0
+
+    def getPosition6(self):
+        return self._pos_mm_6 if self._pos_mm_6 is not None else 0.0
 
     def getSpeed(self):
         return self._act_vel_mm_s if self._act_vel_mm_s is not None else 0.0
@@ -1052,6 +1173,12 @@ class MC_Client:
 
     def getTarget3(self):
         return self._target_mm_3
+
+    def getTarget4(self):
+        return self._target_mm_4
+
+    def getTarget5(self):
+        return self._target_mm_5
 
     def isMoving(self):
         return self._moving
@@ -1147,6 +1274,31 @@ class MC_Client:
         self._speed_mm_s = abs(speed)
         self._cmd("SS", _fmt_arg(abs(speed)))
         self._cmd("MJ", 100 if speed > 0 else -100)
+
+    def moveJoy(self, *pcts):
+        """Packed joystick ``MJ`` percents. ``0`` is a real slot (no ``_`` skip)."""
+        n = int(self._axis) if self._axis else 1
+        if n < 1:
+            n = 1
+        if n > 6:
+            n = 6
+        slots = [int(p) for p in pcts[:n]]
+        while len(slots) < n:
+            slots.append(0)
+        if all(s == 0 for s in slots):
+            self._cmd("MS")
+            return
+        self._cmd("MJ", *slots)
+
+    def jog(self, speed_mm_s, *pcts):
+        """``SS`` then packed ``MJ``. All-zero pcts → ``MS``."""
+        speed = float(speed_mm_s)
+        if abs(speed) < 1e-9 or not pcts or all(int(p) == 0 for p in pcts):
+            self._cmd("MS")
+            return
+        self._speed_mm_s = abs(speed)
+        self._cmd("SS", _fmt_arg(abs(speed)))
+        self.moveJoy(*pcts)
 
     def home(self, axis=None):
         """Homing. ``axis`` None → ``MH`` (MC defaults to 1); ``1``/``2``/``3`` → ``MH n``.
