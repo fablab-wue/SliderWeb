@@ -740,20 +740,16 @@ class PanelApp:
         cfg_map["motors"] = motors
         cfg_map["servos"] = int(mc.getServoCount() if hasattr(mc, "getServoCount") else 0)
         cfg_map["axis_count"] = motors
-        if mc.slider_min is not None:
-            cfg_map["slider_min"] = mc.slider_min
-            cfg_map["slider_min_1"] = mc.slider_min
-            cfg_map["MOTOR_1_min"] = mc.slider_min
-        if mc.slider_max is not None:
-            cfg_map["slider_max"] = mc.slider_max
-            cfg_map["slider_max_1"] = mc.slider_max
-            cfg_map["MOTOR_1_max"] = mc.slider_max
-        if mc.slider_min_2 is not None:
-            cfg_map["slider_min_2"] = mc.slider_min_2
-            cfg_map["MOTOR_2_min"] = mc.slider_min_2
-        if mc.slider_max_2 is not None:
-            cfg_map["slider_max_2"] = mc.slider_max_2
-            cfg_map["MOTOR_2_max"] = mc.slider_max_2
+        cfg_map["slider_min"] = mc.slider_min
+        cfg_map["slider_min_1"] = mc.slider_min
+        cfg_map["MOTOR_1_min"] = mc.slider_min
+        cfg_map["slider_max"] = mc.slider_max
+        cfg_map["slider_max_1"] = mc.slider_max
+        cfg_map["MOTOR_1_max"] = mc.slider_max
+        cfg_map["slider_min_2"] = mc.slider_min_2
+        cfg_map["MOTOR_2_min"] = mc.slider_min_2
+        cfg_map["slider_max_2"] = mc.slider_max_2
+        cfg_map["MOTOR_2_max"] = mc.slider_max_2
         if mc.max_speed is not None:
             cfg_map["max_speed"] = mc.max_speed
             cfg_map["max_speed_1"] = mc.max_speed

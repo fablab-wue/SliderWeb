@@ -24,7 +24,7 @@ _TRIG_LEN_MIN = 0.01
 
 def _parse_slot(s):
     t = str(s).strip()
-    if not t or t == "_" or t.lower() == "none":
+    if not t or t == "_" or t.lower() == "none" or t == "-":
         return None
     try:
         return float(t)

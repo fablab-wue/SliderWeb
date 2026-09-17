@@ -463,11 +463,11 @@ class MC_Client:
         while i < self._axis and i < 6:
             if i < len(mins):
                 v = _parse_cfg_limit(mins[i])
-                if v is not None or (i < len(mins) and str(mins[i]).lower() == "none"):
+                if v is not None or _is_unset(mins[i]):
                     setattr(self, attrs_min[i], v)
             if i < len(maxs):
                 v = _parse_cfg_limit(maxs[i])
-                if v is not None or (i < len(maxs) and str(maxs[i]).lower() == "none"):
+                if v is not None or _is_unset(maxs[i]):
                     setattr(self, attrs_max[i], v)
             i += 1
         self._sync_public_soft()
@@ -1050,7 +1050,7 @@ class MC_Client:
     def _apply_window_slot(self, attr, val, envelope):
         if val is None or (isinstance(val, str) and val == "_"):
             return
-        if isinstance(val, str) and val.lower() == "none":
+        if isinstance(val, str) and _is_unset(val):
             setattr(self, attr, envelope)
             return
         setattr(self, attr, float(val))
@@ -1376,6 +1376,14 @@ def _parse_count(s, lo, hi, default):
     return n
 
 
+def _is_unset(s):
+    """True for missing / NaN wire tokens: empty, ``none``, or a lone ``-``."""
+    if s is None:
+        return True
+    t = str(s).strip().lower()
+    return t == "" or t == "none" or t == "-"
+
+
 def _parse_float(s):
     try:
         return float(s)
@@ -1394,12 +1402,9 @@ def _parse_axis_group(parts):
 
 
 def _parse_cfg_float(s):
-    if s is None:
+    if _is_unset(s):
         return None
-    t = str(s).strip()
-    if not t or t.lower() == "none":
-        return None
-    return _parse_float(t)
+    return _parse_float(str(s).strip())
 
 
 def _parse_cfg_limit(s):

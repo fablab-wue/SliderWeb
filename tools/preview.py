@@ -185,7 +185,7 @@ def _sync_axis_states():
 
 def _parse_slot(s):
     t = str(s).strip()
-    if not t or t == "_" or t.lower() == "none":
+    if not t or t == "_" or t.lower() == "none" or t == "-":
         return None
     try:
         return float(t)
@@ -842,7 +842,7 @@ def _apply_mc(line):
             MOCK["line1"] = "Home"
             return
         if cmd == "SL":
-            if len(parts) > 1 and parts[1].lower() != "none":
+            if len(parts) > 1 and parts[1].lower() != "none" and parts[1] != "-":
                 try:
                     MOCK["soft"]["min"] = float(parts[1])
                 except ValueError:
@@ -852,7 +852,7 @@ def _apply_mc(line):
             _sync_soft_fields()
             return
         if cmd == "SR":
-            if len(parts) > 1 and parts[1].lower() != "none":
+            if len(parts) > 1 and parts[1].lower() != "none" and parts[1] != "-":
                 try:
                     MOCK["soft"]["max"] = float(parts[1])
                 except ValueError:

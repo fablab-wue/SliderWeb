@@ -56,6 +56,17 @@
     return document.getElementById(id);
   }
 
+  function isUnset(v) {
+    if (v == null || v === "") return true;
+    var t = String(v).trim().toLowerCase();
+    return t === "none" || t === "-";
+  }
+  function cfgNum(v) {
+    if (isUnset(v)) return null;
+    var n = Number(v);
+    return isNaN(n) ? null : n;
+  }
+
   /** ETA seconds for distance at speed. Accel ignored for now. */
   function etaSeconds(distance, speed, accel) {
     var d = Math.abs(Number(distance));
@@ -189,8 +200,9 @@
   }
 
   function fmtCfg(v) {
-    if (v == null || v === "" || isNaN(Number(v))) return "—";
-    return Number(v).toFixed(1);
+    v = cfgNum(v);
+    if (v == null) return "—";
+    return v.toFixed(1);
   }
 
   function motorCount(cfg) {
@@ -428,10 +440,10 @@
     }
     if (d.soft && typeof d.soft === "object") {
       softLimits = {
-        min: d.soft.min != null ? Number(d.soft.min) : null,
-        max: d.soft.max != null ? Number(d.soft.max) : null,
-        min2: d.soft.min2 != null ? Number(d.soft.min2) : null,
-        max2: d.soft.max2 != null ? Number(d.soft.max2) : null,
+        min: cfgNum(d.soft.min),
+        max: cfgNum(d.soft.max),
+        min2: cfgNum(d.soft.min2),
+        max2: cfgNum(d.soft.max2),
       };
     }
     if (d.session && typeof d.session === "object") {
@@ -463,15 +475,15 @@
     }
     lastStatus = d;
     if (d.soft && typeof d.soft === "object") {
-      softLimits.min = d.soft.min != null ? Number(d.soft.min) : softLimits.min;
-      softLimits.max = d.soft.max != null ? Number(d.soft.max) : softLimits.max;
-      softLimits.min2 = d.soft.min2 != null ? Number(d.soft.min2) : softLimits.min2;
-      softLimits.max2 = d.soft.max2 != null ? Number(d.soft.max2) : softLimits.max2;
+      if (d.soft.min !== undefined) softLimits.min = cfgNum(d.soft.min);
+      if (d.soft.max !== undefined) softLimits.max = cfgNum(d.soft.max);
+      if (d.soft.min2 !== undefined) softLimits.min2 = cfgNum(d.soft.min2);
+      if (d.soft.max2 !== undefined) softLimits.max2 = cfgNum(d.soft.max2);
     } else {
-      if (d.soft_min != null) softLimits.min = Number(d.soft_min);
-      if (d.soft_max != null) softLimits.max = Number(d.soft_max);
-      if (d.soft_min_2 != null) softLimits.min2 = Number(d.soft_min_2);
-      if (d.soft_max_2 != null) softLimits.max2 = Number(d.soft_max_2);
+      if (d.soft_min !== undefined) softLimits.min = cfgNum(d.soft_min);
+      if (d.soft_max !== undefined) softLimits.max = cfgNum(d.soft_max);
+      if (d.soft_min_2 !== undefined) softLimits.min2 = cfgNum(d.soft_min_2);
+      if (d.soft_max_2 !== undefined) softLimits.max2 = cfgNum(d.soft_max_2);
     }
     if (d.session && typeof d.session === "object") {
       session.enabled = !!d.session.enabled;
