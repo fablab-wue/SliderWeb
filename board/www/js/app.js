@@ -224,15 +224,15 @@
 
   function applyUnitsFromConfig(cfg) {
     cfg = cfg || cfgCache || {};
-    var u1 = normalizeUnit(cfg.unit_name || cfg.unit || "mm");
+    var u1 = normalizeUnit(cfg.axis_1_unit || "mm");
     unitPos = u1;
     unitSpd = u1 + "/s";
     unitAcc = u1 + "/s²";
     var dual = motorCount(cfg) >= 2;
     var u2 = u1;
     if (dual) {
-      if (cfg.unit_name_2 != null && String(cfg.unit_name_2).trim()) {
-        u2 = normalizeUnit(cfg.unit_name_2);
+      if (cfg.axis_2_unit != null && String(cfg.axis_2_unit).trim()) {
+        u2 = normalizeUnit(cfg.axis_2_unit);
       }
     }
     unitPos2 = u2;

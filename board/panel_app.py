@@ -627,12 +627,12 @@ class PanelApp:
         max_spd = self._max_spd()
         if mc is not None:
             axes = int(mc.getMotorCount() if hasattr(mc, "getMotorCount") else (mc.axis_count or 1))
-            if mc.unit_name:
-                unit = mc.unit_name
-            if axes >= 2 and mc.mc_config:
-                u2 = mc.mc_config.get("unit_name_2")
-                if u2 is not None and str(u2).strip():
-                    unit2 = str(u2).strip()
+            units = getattr(mc, "axis_unit", None) or []
+            if units and units[0]:
+                unit = units[0]
+            if axes >= 2:
+                if len(units) > 1 and units[1]:
+                    unit2 = units[1]
                 else:
                     unit2 = unit
             smin = mc.slider_min
@@ -724,8 +724,8 @@ class PanelApp:
                     "max_accel": 500.0,
                     "max_accel_1": 500.0,
                     "max_accel_2": 500.0,
-                    "unit_name": "mm",
-                    "unit_name_2": "deg",
+                    "axis_1_unit": "mm",
+                    "axis_2_unit": "deg",
                     "speed_tl_mm_s": float(getattr(cfg, "SW_SPEED_TL_MM_S", 5.0)),
                     "accel_tl_mm_s2": float(getattr(cfg, "SW_ACCEL_TL_MM_S2", 50.0)),
                 }
@@ -759,11 +759,11 @@ class PanelApp:
         cfg_map["speed_tl_mm_s"] = float(getattr(cfg, "SW_SPEED_TL_MM_S", 5.0))
         cfg_map["accel_tl_mm_s2"] = float(getattr(cfg, "SW_ACCEL_TL_MM_S2", 50.0))
         if int(cfg_map.get("motors") or cfg_map.get("axis_count") or 1) >= 2:
-            u2 = cfg_map.get("unit_name_2")
-            if u2 is None:
-                u2 = cfg_map.get("unit_name")
-            if u2 is not None:
-                cfg_map["unit_name_2"] = u2
+            u2 = cfg_map.get("axis_2_unit")
+            if u2 is None or not str(u2).strip():
+                u1 = cfg_map.get("axis_1_unit")
+                if u1 is not None:
+                    cfg_map["axis_2_unit"] = u1
         return cfg_map
 
     def _sim_push(self):

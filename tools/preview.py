@@ -96,8 +96,8 @@ CONFIG = {
     "max_accel_2": 500.0,
     "init_speed": 40.0,
     "init_accel": 100.0,
-    "unit_name": "mm",
-    "unit_name_2": "deg",
+    "axis_1_unit": "mm",
+    "axis_2_unit": "deg",
     "speed_tl_mm_s": 5.0,
     "accel_tl_mm_s2": 50.0,
 }

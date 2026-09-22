@@ -199,7 +199,7 @@ class MC_Client:
         self.soft_max_5 = None
         self.soft_min_6 = None
         self.soft_max_6 = None
-        self.unit_name = None
+        self.axis_unit = [None] * 6
         # Public McState int; LOCKED until first verbose status.
         self.status = self.MC_STATE_LOCKED
 
@@ -289,7 +289,12 @@ class MC_Client:
         await self.send("SV", 1)
         await self.fetchConfig()
         cfgd = self.mc_config or {}
-        if "axis" not in cfgd and "max_speed" not in cfgd and "max_speed_1" not in cfgd:
+        if (
+            "axis" not in cfgd
+            and "max_speed" not in cfgd
+            and "max_speed_1" not in cfgd
+            and "motor_1_max_speed" not in cfgd
+        ):
             self.link_reason = "not an MC"
             print("not an MC (no CG axis/max_speed)")
             return False
@@ -362,12 +367,21 @@ class MC_Client:
 
         self.mc_config = dict(collected)
         self._apply_counts(collected)
-        un = collected.get("unit_name")
-        if un is not None:
-            un = str(un).strip()
-        self.unit_name = un if un else None
-        self.max_speed = _parse_cfg_float(collected.get("max_speed_1"))
-        self.max_accel = _parse_cfg_float(collected.get("max_accel_1"))
+        units = []
+        i = 1
+        while i <= 6:
+            un = collected.get("axis_%d_unit" % i)
+            if un is not None:
+                un = str(un).strip() or None
+            units.append(un)
+            i += 1
+        self.axis_unit = units
+        self.max_speed = _parse_cfg_float(
+            collected.get("motor_1_max_speed", collected.get("max_speed_1"))
+        )
+        self.max_accel = _parse_cfg_float(
+            collected.get("motor_1_max_accel", collected.get("max_accel_1"))
+        )
         pairs = []
         i = 1
         while i <= 6:
@@ -408,8 +422,8 @@ class MC_Client:
         return self.mc_config
 
     def _apply_counts(self, collected):
-        motors_s = collected.get("motors")
-        servos_s = collected.get("servos")
+        motors_s = collected.get("motor_count", collected.get("motors"))
+        servos_s = collected.get("servo_count", collected.get("servos"))
         if motors_s is not None or servos_s is not None:
             self._motors = _parse_count(motors_s, 1, 3, 1)
             self._servos = _parse_count(servos_s, 0, 3, 0)
@@ -957,7 +971,7 @@ class MC_Client:
         self.max_speed = v
         if self._speed_mm_s is not None and self._speed_mm_s > v:
             self._speed_mm_s = v
-        self._cmd("CS", "max_speed_1 %s" % _fmt_arg(v))
+        self._cmd("CS", "motor_1_max_speed %s" % _fmt_arg(v))
 
     def setAcceleration(self, accel):
         self._accel_mm_s2 = max(float(accel), cfg.MIN_SPEED_MM_S)
@@ -1415,12 +1429,20 @@ def _envelope_from_cfg(collected, n, motors):
     """Packed channel ``n`` (1-based): MOTOR_/SERVO_ then axis_min_N then legacy."""
     mn = mx = None
     if n <= motors:
-        mn = _parse_cfg_limit(collected.get("MOTOR_%d_min" % n))
-        mx = _parse_cfg_limit(collected.get("MOTOR_%d_max" % n))
+        mn = _parse_cfg_limit(
+            collected.get("motor_%d_min" % n, collected.get("MOTOR_%d_min" % n))
+        )
+        mx = _parse_cfg_limit(
+            collected.get("motor_%d_max" % n, collected.get("MOTOR_%d_max" % n))
+        )
     else:
         s = n - motors
-        mn = _parse_cfg_limit(collected.get("SERVO_%d_min" % s))
-        mx = _parse_cfg_limit(collected.get("SERVO_%d_max" % s))
+        mn = _parse_cfg_limit(
+            collected.get("servo_%d_min" % s, collected.get("SERVO_%d_min" % s))
+        )
+        mx = _parse_cfg_limit(
+            collected.get("servo_%d_max" % s, collected.get("SERVO_%d_max" % s))
+        )
     if mn is None:
         mn = _parse_cfg_limit(collected.get("axis_min_%d" % n))
     if mn is None:
